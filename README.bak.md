@@ -1,11 +1,4 @@
-[TOC]
-
 # 🧠 Dynamic A/B Testing Analysis Framework
-
-> **How to use these docs**
->
-> * Start with this `README.md` to understand what the framework does, how it fits into your experimentation stack, and how to configure and call its APIs.
-> * Use `AB_TESTING_THEORY.md` for the detailed statistical background: full math, derivations, and methodology justifications that underpin the helpers and decisions described here.
 
 ## 1. 🔬 Understanding A/B Testing: Goals and Fundamentals
 
@@ -107,54 +100,324 @@ This framework sits **on top of** the experimentation system and owns **math and
 
 From the framework's point of view, **shadow variants are just additional variant labels**. The special behavior of "shadow" (not user-visible, used only for pre-A/B validation) is enforced entirely by the upstream system.
 
-### Choosing the Unit of Randomization vs. Unit of Analysis (Framework View)
+### Choosing the Unit of Randomization vs. Unit of Analysis
 
-When configuring this package you must choose a **`unit_id`** (for example `user_id`, `conversation_id`, or `session_id`). In practice:
+One of the first practical decisions in any experiment is: **"What is my unit?"**
 
-* Most product teams should start with **user‑level experiments** (`unit_id = user_id`) for user‑centric metrics.
-* Conversation‑ or session‑level units are appropriate only when the metric and experience are truly conversation/session‑centric and you are comfortable with mixed exposure across a user’s lifetime.
-* Whatever you randomize on, you should **aggregate and analyze at that same unit** before passing data into the framework.
+The golden rule is:[^kohavi-unit]
 
-The detailed trade‑offs (including the bot example, correlation, and cluster‑robust analysis) are covered in:
+> **Unit of randomization = Unit of analysis**
 
-*See: `AB_TESTING_THEORY.md` – Section 2, “Choosing the Unit of Randomization vs. Unit of Analysis”.*
+This keeps your statistics valid and your interpretation simple: you analyze the same entity you randomized.
 
-### Statistical Framework (high level)
+#### Example Dilemma: Users, Conversations, and Sessions in a Bot System
 
-For this package, you mainly need to configure a small set of **statistical knobs**:
+Imagine your product is a **bot assistant**:
 
-* **Significance level (α)** – false‑positive budget (often 0.05).
-* **Statistical power (1−β)** – probability of detecting a true effect when it exists (often 0.8).
-* **Minimum Detectable Effect (MDE)** – smallest lift that is business‑meaningful, defined relative to the baseline.
-* **Sample size** – number of randomized units required, computed from the above.
+* You have **users** (with `user_id`)
+* Each user can open multiple **conversations** (with `conversation_id`)
+* A single conversation with an agent can stay **open for days**, and is split into multiple **sessions** according to your sessionization logic (e.g., inactivity timeout, reopen rules), each with its own `session_id`
+* You want to change the bot logic and run an A/B test
 
-Under the hood, the framework uses standard tests:
+This gives you a natural hierarchy:
 
-* Proportion tests for **rate metrics** (e.g., conversion, CTR).
-* Mean tests (e.g., Welch’s t‑test) for **continuous metrics** (e.g., revenue per user, time).
-* Confidence intervals around estimated lifts.
+```text
+user_id → conversation_id → session_id
+```
 
-All formulas, variance definitions, sample‑size equations, and clustered standard‑error details live in the theory reference:
+You now face a natural question:
 
-*See: `AB_TESTING_THEORY.md` – Section 3, “Statistical Framework & Math Cheat‑Sheet”.*
+> Should the **unit_id** be `user_id` or `session_id`?
+
+Both choices are legitimate, but they answer **slightly different questions** and affect both user experience and statistical properties.
+
+#### Option 1: Randomize by `user_id`
+
+**What it means**
+
+* Each user is assigned once to an experiment variant (e.g., variant A or variant B — in many systems named control and treatment)
+* All conversations for that user follow the same variant during the experiment
+
+**Pros**
+
+* **Consistent experience** per user – the same human always sees the same behavior
+* Natural for user-level metrics:
+    * "% of users with at least one resolved conversation"
+    * "Average conversations per user per week"
+    * "User retention after N days"
+* Easier interpretation: "If a user is exposed to B instead of A, how does their behavior change?"
+
+**Cons**
+
+* Fewer independent units than conversations → may require **longer duration** for the same power
+
+**When to prefer `user_id` as unit**
+
+* Your primary metrics are **user-centric** (engagement, satisfaction, retention)
+* You care about a **stable, predictable** experience for the same person
+* Conversations for the same user are clearly **not independent** (very common)
+
+In this framework, if you randomize by `user_id`, you should also **analyze metrics at user level** (aggregate conversation data per user before running tests).
+
+#### Option 2: Randomize by `session_id`
+
+**What it means**
+
+* Each new **session** is randomized independently to A or B
+* The same user (and even the same long‑lived conversation) can see A in some sessions and B in others
+
+**Pros**
+
+* Many more units (sessions) → potentially **shorter tests** for **session‑level** metrics
+* Direct answer to: "Does the treatment improve metrics **per session**?" (e.g., resolution rate per session, average handling time per session)
+
+**Cons**
+
+* The same user can experience **mixed behavior** (sometimes variant A, sometimes variant B across sessions)
+* User-level interpretation becomes more complex (each user sees a blend of both variants / treatments)
+* Sessions from the same user are often **correlated**; naive per‑session analysis can **overstate significance** unless you use clustered/robust methods
+
+**When to prefer `session_id` as unit**
+
+* Your primary metric is truly **per-session**, and user-level experience consistency is less critical
+    * e.g., "resolution rate per session", "average handling time per session"
+* Sessions are relatively **independent tasks** from the user's perspective (even if they belong to the same long‑running conversation)
+
+In many real systems (including this bot example), you can also **randomize at `conversation_id` and analyze at `session_id`**:
+
+* Each **conversation** is assigned once to A or B (unit of randomization = `conversation_id`).
+* All **sessions within that conversation** inherit the same treatment, so they are valid sub‑units for analysis.
+
+In that setup, you typically:
+
+* Run primary tests at the **conversation level** (respecting the randomization unit), and
+* Optionally use **session‑level aggregates** for richer diagnostics, with cluster‑robust methods that **cluster by `conversation_id`**.
+
+For example, in Python with `statsmodels` you might:
+
+```python
+import statsmodels.formula.api as smf
+
+# conversation_id is the randomized unit; sessions are repeated observations
+model = smf.ols(
+    "session_metric ~ C(variant_label)",
+    data=session_level_df
+).fit(cov_type="cluster", cov_kwds={"groups": session_level_df["conversation_id"]})
+
+print(model.summary())  # treatment coefficient with conversation-level clustered SEs
+```
+
+#### Practical Guidance for This Framework
+
+For most product scenarios (including the bot use case), the recommended **default** is:
+
+* Choose **`user_id` as the `unit_id`** (unit of randomization)
+* Aggregate session / conversation events to **user-level metrics** (unit of analysis)
+
+Conversation-level randomization (`conversation_id`) is still valid, but should be a deliberate choice when:
+
+* The experiment is focused on **conversation-level operations** where an entire conversation is the natural indivisible unit, and
+* You are comfortable with users seeing a **mix of variants (e.g., control/treatment or A/B) across different conversations and sessions**, and
+* You adjust your statistical analysis to respect the correlation between conversations/sessions of the same user.
+
+In short:
+
+> Start with **user-level experiments** for user-centric metrics and experience.
+> Use **conversation-level experiments** for low-level operational metrics, with careful analysis.
+
+#### 3. **Statistical Framework**
+* **Significance Level (α)**: How likely your experiment is to find a difference that doesn't actually exist. Technically, this is the probability of false positive (Type I error), typically 0.05 = 5% chance of being fooled
+* **Statistical Power (1-β)**: How likely your experiment is to catch a real improvement when there actually is one. Technically, this is the probability of detecting true effect when it exists (Type II error), typically 0.8 = 80% chance of spotting real changes
+* **Minimum Detectable Effect (MDE)**: Minimum meaningful difference you want to be able to detect
+* **Sample Size**: Number of units needed for reliable results
+
+### 🧮 Math Cheat‑Sheet: What This Framework Computes
+
+At a high level, the framework’s statistical engine answers:
+
+> "Given my baseline performance, desired minimum detectable effect (MDE), significance level (α), and power, how many units do I need — and, once I have data, is the observed difference real or just noise?"
+
+We mainly use:
+
+* **Proportion tests** for rate metrics (e.g., conversion, CTR)
+* **Mean tests** for continuous metrics (e.g., revenue per user, time)
+* **Confidence intervals** to express uncertainty around the estimated lift
+
+These choices follow standard A/B testing practice (e.g., z‑tests for proportions and Welch’s t‑test for means; see common treatments in introductory statistics texts or Kohavi et al., *Trustworthy Online Controlled Experiments*).
+
+#### A) Proportion / rate metrics (conversion rate, CTR, etc.)
+
+Let:
+
+* $p_A$ = conversion rate in control  
+* $p_B$ = conversion rate in treatment  
+* $n_A$, $n_B$ = sample sizes per group  
+* $\Delta = p_B - p_A$ = absolute difference
+
+Approximate **standard error** of a proportion near baseline $p$ (for planning):
+
+$$
+	ext{SE}(p) \approx \sqrt{\frac{p(1-p)}{n}}
+$$
+
+For the **difference in proportions** during analysis, we use a pooled standard error and compute a z‑statistic:
+
+$$
+Z = \frac{\Delta}{\text{SE}_\text{pooled}}
+$$
+
+A stats library then converts $Z$ into a **p‑value**; if $p_\text{value} < \alpha$, the result is *statistically significant*.
+
+#### B) Continuous metrics (revenue per user, time, etc.)
+
+Let:
+
+* $\mu_A$, $\mu_B$ = sample means per group  
+* $s_A$, $s_B$ = sample standard deviations  
+* $n_A$, $n_B$ = sample sizes
+
+The **standard error of the mean** is approximately:
+
+$$
+	ext{SE}(\mu) \approx \frac{s}{\sqrt{n}}
+$$
+
+For the difference in means, we use a (Welch) **t‑test**:
+
+$$
+t = \frac{\mu_B - \mu_A}{\text{SE}_\text{diff}}
+$$
+
+Again, a stats library converts $t$ into a p‑value and confidence interval.
+
+#### C) Sample size for proportion metrics
+
+For a proportion metric with equal split between control and treatment, a standard approximation for **required sample size per group** is:
+
+$$
+n_{\text{per group}} \approx 2 \cdot (Z_{\alpha/2} + Z_{\beta})^2 \cdot \frac{p(1-p)}{\text{MDE}^2}
+$$
+
+Where:
+
+* $Z_{\alpha/2}$ = critical value for significance level (e.g., 1.96 for $\alpha = 0.05$)  
+* $Z_{\beta}$ = critical value for power (e.g., 0.84 for power = 0.8)  
+* $p$ = baseline rate (e.g., current conversion rate)  
+* **MDE** = absolute minimum detectable effect (e.g., 10% relative lift on 3.2% → 0.0032 absolute)
+
+This is the formula implemented by functions like `calculate_sample_size(...)` in this framework.
+
+#### D) Clustered standard errors (when observations are grouped)
+
+In many practical experiments, the **randomization unit** and the **raw rows in your dataset** are not the same:
+
+* You might randomize at **user** or **conversation** level, but observe multiple **sessions** or **events** per unit.
+* Those rows inside the same user/conversation are typically **correlated** (same person, same context).
+
+If you naively treat all rows as independent and use standard formulas for the standard error, you will typically **underestimate variance** and get p‑values that are **too optimistic**.
+
+Cluster‑robust standard errors fix this by:
+
+1. Keeping the **same point estimate** (e.g., difference in means or regression coefficient), but
+2. Changing how the **variance of that estimate** is computed, so that residuals are allowed to be arbitrarily correlated **within** a cluster (user, conversation) but treated as independent **across** clusters.
+
+Very schematically, for a linear model with design matrix $X$, coefficients $\hat{\beta}$, and clusters $g = 1, \dots, G$:
+
+$$
+\widehat{\text{Var}}_{\text{cluster}}(\hat{\beta})
+    = (X'X)^{-1} \Bigg( \sum_{g=1}^G X_g' \hat{u}_g \hat{u}_g' X_g \Bigg) (X'X)^{-1},
+$$
+
+where $X_g$ and $\hat{u}_g$ are the rows of $X$ and residuals corresponding to cluster $g$.
+
+**When to use clustered SEs**
+
+* Whenever **randomization happens at a higher level** than the rows you are modeling.
+        * e.g., randomize by `conversation_id`, analyze per‑session rows → **cluster by `conversation_id`**.
+        * e.g., randomize by `user_id`, analyze per‑event rows → **cluster by `user_id`**.
+* Rule of thumb: **cluster at least at the level of randomization**. If in doubt, cluster by the highest natural grouping (usually users).
+
+In the code example below (conversation‑level randomization, session‑level analysis), we use this clustered variance to keep inference aligned with the randomization unit.
+
+---
+
+## 2. 👩‍🔬 The Data Scientist's Role in A/B Testing
+
+### Pre-Experiment Responsibilities
+
+* **Metric Definition**: Clearly define what you're measuring - this can be:
+  * **Ratio/Percentage metrics**: CTR (clicks/impressions), Conversion Rate (purchases/visitors), Success Rate (completions/attempts)
+  * **Quantity/Value metrics**: Revenue per User, Time on Site, Items per Order, Page Load Time
+* **Experiment Design**: Define hypothesis, success metrics, and statistical parameters
+  * **Statistical parameters** include: significance level (α), power (1-β), minimum detectable effect (MDE), and baseline metric value
+* **Sample Size Calculation**: Determine required sample size based on expected effect and constraints
+* **Randomization Strategy**: Choose appropriate randomization unit and allocation method
+* **Success Criteria**: Set clear thresholds for statistical and practical significance
+
+### During Experiment
+
+* **Data Quality Monitoring**: Check for Sample Ratio Mismatch (SRM) and other data issues
+    * **SRM math**: Use a χ² (chi‑square) goodness‑of‑fit test to compare observed counts per variant vs. the expected split (e.g., 50/50). A significant χ² indicates broken randomization, logging, or filtering, and results should be treated as **INCONCLUSIVE** until fixed.
+* **Sequential Analysis**: Monitor experiment progress without compromising statistical validity
+    * **Sequential looks**: Every unplanned peek at the p‑value increases your overall false‑positive rate. If you plan interim looks, use **alpha‑spending** or **group‑sequential** boundaries so the total experiment‑level α stays at your configured value (e.g., 0.05).
+* **Interim Analysis**: Provide updates while maintaining experiment integrity
+* **Issue Detection**: Identify technical problems or unexpected behavior patterns
+
+### Post-Experiment Analysis
+
+* **Statistical Testing**: Apply appropriate tests (t-test, chi-square, Mann-Whitney U, etc.)
+* **Effect Size Estimation**: Calculate confidence intervals for business impact
+* **Practical Significance**: Interpret statistical results in business context
+* **Recommendation**: Provide clear go/no-go decision with supporting evidence
+
+---
 
 ## 3. 📊 Sample Size Determination: The Foundation
 
-This framework provides helpers such as `calculate_sample_size(...)` and `calculate_experiment_duration(...)` to turn your **statistical choices** into concrete **sample sizes and durations**.
+### Required Inputs for Sample Size Calculation
 
-At configuration time you typically provide:
+#### Statistical Parameters
+* **Significance Level (α)**: Risk of false positive (Type I error)
+  * Common choice: α = 0.05 (5% false positive rate)
+* **Statistical Power (1-β)**: Probability of detecting true effect (Type II error)
+  * Common choice: Power = 0.8 (80% chance to detect real effect)
 
-* Statistical parameters: **α**, **power (1−β)**, and an **MDE** (defined relative to the baseline).
-* Business parameters: **baseline level** of the primary metric and **traffic allocation** (e.g., 50/50 vs 90/10).
+#### Business Parameters
+* **Baseline Rate**: Current performance of the control variant
+  * Example: Current conversion rate = 3.2% (or 0.032)
+* **Minimum Detectable Effect (MDE)**: Smallest change worth detecting - **IMPORTANT: This is relative to baseline, not absolute**
+  * Example: Baseline = 70% (0.7), MDE = 10% relative improvement
+  * Calculation: 0.7 × (1 + 0.10) = 0.7 × 1.10 = 0.77 (77%)
+  * So we're testing: 70% → 77% (not 70% → 80%)
+* **Traffic Allocation**: Proportion of users in each variant (control vs. treatment)
+  * Example: 50/50 split vs. 90/10 split
 
-Given these, the helpers:
+#### Metric Type Considerations
+* **Proportion Metrics** (CTR, Conversion Rate): Use normal approximation or exact tests
+* **Continuous Metrics** (Revenue, Time Spent): Requires variance estimation
+* **Count Metrics** (Page Views, Purchases): May need Poisson or negative binomial models
 
-* Compute the **required sample size per variant** for your primary metric, and
-* Map that requirement into an **estimated number of days** given your historical traffic and chosen experiment‑traffic percentage.
+### Sample Size Formula Example
 
-All underlying formulas (e.g., for proportions, continuous metrics, and practical considerations such as seasonality, external shocks, and variance reduction) are detailed in:
+For **proportion metrics** with equal allocation:
 
-*`AB_TESTING_THEORY.md` – Section 4, “Sample Size Determination and Experiment Planning (high level)”.*
+```
+n = 2 × (Z_α/2 + Z_β)² × p̂(1-p̂) / (MDE)²
+
+Where:
+- n = sample size per variant (control or treatment)
+- Z_α/2 = critical value for significance level
+- Z_β = critical value for power
+- p̂ = baseline proportion
+- MDE = minimum detectable effect
+```
+
+### Practical Considerations
+
+* **Seasonality**: Account for weekly/monthly patterns in user behavior
+* **External Factors**: Consider marketing campaigns, holidays, product launches
+* **Multiple Testing**: Adjust for multiple metrics or sequential testing
+* **Variance Reduction**: Use CUPED or stratification to reduce required sample size
 
 ---
 
@@ -163,15 +426,11 @@ All underlying formulas (e.g., for proportions, continuous metrics, and practica
 ### Step-by-Step Process
 
 #### 1. **Planning Phase**
-
-High‑level planning follows:
-
 ```
-Choose α and power → Define meaningful business impact → Translate to MDE →
-Choose metric and baseline → Compute required sample size → Map to duration via traffic
+Choose α (significance level) → Choose Power → Define Meaningful Impact → Calculate Sample Size → Estimate Duration
 ```
 
-In code, this looks like configuring parameters and then calling helpers in this framework. For example:
+**Example Planning Session:**
 ```python
 # Step 1: Choose statistical parameters
 alpha = 0.05          # 5% false positive rate
@@ -202,7 +461,7 @@ print(f"Daily experiment users: {daily_experiment_users:,}")
 print(f"Estimated duration: {duration_days} days")
 ```
 
-**Duration Calculation Helper (package‑oriented sketch):**
+**Duration Calculation Function:**
 ```python
 def calculate_experiment_duration(required_sample_size, daily_traffic, 
                                   experiment_traffic_pct, buffer_factor=1.2):
@@ -238,13 +497,17 @@ duration_info = calculate_experiment_duration(
 # Result: ~6 days
 ```
 
-The **theory details** behind these calculations (effects of seasonality, external factors, multiple testing, and variance reduction) are covered in the theory reference. Here in the README we focus on **how to call** the helpers and wire them into your planning flow.
+**Duration Calculation Considerations:**
 
-For more on planning theory, see:
+| Factor | Impact on Duration | Example |
+|--------|-------------------|---------|
+| **Sample Size** | Larger sample → Longer duration | 100K vs 50K samples |
+| **Daily Traffic** | More traffic → Shorter duration | 50K vs 10K daily users |
+| **Experiment %** | Higher % → Shorter duration | 100% vs 50% in experiment |
+| **Buffer Factor** | Higher buffer → Longer duration | 1.3 (30%) vs 1.1 (10%) |
+| **Seasonality** | Weekends/holidays → Longer | Account for low-traffic days |
 
-*`AB_TESTING_THEORY.md` – Section 4, “Sample Size Determination and Experiment Planning (high level)”.*
-
-**Example Scenarios (framework usage):**
+**Example Scenarios:**
 ```python
 # Scenario 1: High traffic site, full allocation
 calculate_experiment_duration(required_sample_size=100000, daily_traffic=50000, experiment_traffic_pct=1.0)
@@ -289,14 +552,10 @@ aa_test = {
 * **Statistical Framework**: False positive rate matches expected α
 * **Infrastructure**: No technical biases or bugs in assignment logic
 
-At a theory level, SRM checks are typically implemented via a **χ² goodness‑of‑fit test** on counts per variant, and frequent peeking at p‑values must be accounted for via sequential‑testing corrections. Those details live in:
-
-*`AB_TESTING_THEORY.md` – Section 5, “Data Quality, SRM, and Sequential Monitoring”.*
-
-**A/A Test Success Criteria (package view):**
-* Traffic split close to the intended allocation (e.g., near 50/50 when planned)
-* Metrics show **no statistically significant difference** (p‑value > α)
-* If a difference appears significant, or SRM is flagged, investigate before proceeding to A/B testing
+**A/A Test Success Criteria:**
+* Traffic split should be 50/50 ± 1%
+* Metrics should show **no significant difference** (p-value > α)
+* If p-value < α, investigate before proceeding to A/B testing
 
 #### 3. **A/B Testing Phase**
 ```python
@@ -402,18 +661,168 @@ results = {
 
 ### 🎯 Go/NoGo Decision Framework
 
-The package exposes helpers to combine **statistics**, **business impact**, and **data quality** into a single structured recommendation (`GO`, `NO-GO`, `EXTEND`, `INCONCLUSIVE`). At a practical level you:
+Making the right decision requires both **statistical significance** and **business significance**. Here's a comprehensive decision-making framework:
 
-* Compute a p‑value and lift for your **primary metric**.
-* Compare the lift against your configured **MDE**.
-* Run data‑quality checks (SRM, duration vs. plan, pipeline health, guardrails).
-* Feed these into a small decision helper that returns a decision, reason, and suggested next action.
+#### Decision Criteria Matrix
 
-The underlying theory—how to think about statistical vs business significance, why data quality is a first‑class gate, and how the decision matrix is structured—is detailed in:
+| Statistical Significance | Business Significance | Data Quality | Decision | Action |
+|--------------------------|----------------------|--------------|----------|--------|
+| ✅ Significant (p < α) | ✅ Meaningful Impact | ✅ High Quality | **GO** | Ship to production |
+| ✅ Significant (p < α) | ❌ Too Small Impact | ✅ High Quality | **NO-GO** | Don't ship, try bigger change |
+| ❌ Not Significant | ✅ Promising Direction | ✅ High Quality | **EXTEND** | Run longer or increase sample |
+| ❌ Not Significant | ❌ Small Impact | ✅ High Quality | **NO-GO** | Abandon, try different approach |
+| Any | Any | ❌ Poor Quality | **INCONCLUSIVE** | Fix data issues, re-run |
 
-*`AB_TESTING_THEORY.md` – Section 8, “Decision Framework: Statistical vs Business Significance”.*
+#### Detailed Decision Criteria
 
-Here in the README, the focus is on **how to interpret** the outputs of those helpers and wire them into your experimentation workflow. A typical decision summary returned by the framework might look like:
+**1. Statistical Significance Check**
+
+Use this when you want a simple, reusable way to answer: *“Is the observed difference statistically significant at my chosen alpha?”*.
+
+- **Inputs**: a `p_value` from your statistical test and an `alpha` threshold (default 0.05).
+- **Outputs**: a small dict saying whether the result is significant and what confidence level it corresponds to.
+- **Typical usage**: call this right after computing a test statistic/p-value for your primary metric.
+```python
+def check_statistical_significance(p_value, alpha=0.05):
+    return {
+        "is_significant": p_value < alpha,
+        "p_value": p_value,
+        "alpha": alpha,
+        "confidence_level": 1 - alpha
+    }
+```
+
+**2. Business Significance Assessment**
+
+Use this to answer: *“Even if the result is statistically significant, is the size of the effect big enough to matter for the business?”*.
+
+- **Inputs**: `observed_lift` (relative or absolute, but consistent with your MDE definition) and `minimum_meaningful_effect` (your MDE).
+- **Outputs**: a dict indicating whether the observed lift clears the practical-impact bar and echoing the thresholds used.
+- **Typical usage**: run this alongside the statistical check so you don’t ship tiny, economically irrelevant wins.
+```python
+def check_business_significance(observed_lift, minimum_meaningful_effect):
+    return {
+        "is_meaningful": abs(observed_lift) >= minimum_meaningful_effect,
+        "observed_lift": observed_lift,
+        "minimum_required": minimum_meaningful_effect,
+        "meets_threshold": abs(observed_lift) >= minimum_meaningful_effect
+    }
+```
+
+**3. Data Quality Validation**
+
+Use this before trusting any experiment result, to make sure the underlying data and execution are sound.
+
+- **Inputs**: a `results` summary object containing basic counts, durations, and health indicators for the experiment.
+- **Checks**: sample ratio mismatch, minimum sample size, planned vs. actual duration, external events, and pipeline health.
+- **Outputs**: a dict with `is_high_quality`, the per-check flags, and a list of failed check names.
+- **Typical usage**: call this once per experiment run and feed its output into the decision function below.
+```python
+def check_data_quality(results):
+    checks = {
+        "sample_ratio_mismatch": abs(results['control_n'] / results['treatment_n'] - 1) < 0.05,
+        "sufficient_sample_size": results['total_n'] >= results['required_n'],
+        "experiment_duration": results['actual_days'] >= results['planned_days'],
+        "no_external_interference": results['external_events'] == [],
+        "data_pipeline_health": results['missing_data_rate'] < 0.01
+    }
+    is_high_quality = all(checks.values())
+    failed_checks = [name for name, ok in checks.items() if not ok]
+    return {
+        "is_high_quality": is_high_quality,
+        "checks": checks,
+        "failed_checks": failed_checks
+    }
+```
+
+#### Decision Tree Algorithm
+
+```python
+def make_go_nogo_decision(statistical_result, business_result, quality_result):
+        """Combine stats, business impact, and data quality into a single decision.
+
+        - Call this after you have:
+            - `statistical_result` from `check_statistical_significance`,
+            - `business_result` from `check_business_significance`, and
+            - `quality_result` from `check_data_quality`.
+
+        It applies a consistent policy to return one of: GO, NO-GO, EXTEND, or INCONCLUSIVE,
+        along with a short explanation and recommended next action.
+        """
+    
+    # Check data quality first
+    if not quality_result['is_high_quality']:
+        return {
+            "decision": "INCONCLUSIVE",
+            "reason": "Data quality issues detected",
+            "action": "Fix data pipeline and re-run experiment",
+            "failed_checks": quality_result['failed_checks']
+        }
+    
+    # Check for negative impact (guardrail violation)
+    if statistical_result['is_significant'] and business_result['observed_lift'] < 0:
+        return {
+            "decision": "NO-GO",
+            "reason": "Statistically significant negative impact",
+            "action": "Do not ship - treatment hurts the metric",
+            "risk_level": "HIGH"
+        }
+    
+    # Positive results decision matrix
+    if statistical_result['is_significant'] and business_result['is_meaningful']:
+        return {
+            "decision": "GO",
+            "reason": "Statistically and practically significant improvement",
+            "action": "Ship to production",
+            "confidence": "HIGH"
+        }
+    
+    elif statistical_result['is_significant'] and not business_result['is_meaningful']:
+        return {
+            "decision": "NO-GO",
+            "reason": "Statistically significant but impact too small",
+            "action": "Consider larger changes or different approach",
+            "confidence": "MEDIUM"
+        }
+    
+    elif not statistical_result['is_significant'] and business_result['observed_lift'] > 0:
+        return {
+            "decision": "EXTEND",
+            "reason": "Promising direction but not yet significant",
+            "action": "Run longer or increase sample size",
+            "confidence": "LOW"
+        }
+    
+    else:
+        return {
+            "decision": "NO-GO",
+            "reason": "No significant improvement detected",
+            "action": "Try different approach or abandon feature",
+            "confidence": "MEDIUM"
+        }
+```
+
+#### Risk Assessment Framework
+
+**Low Risk Decisions (Quick Ship)**
+- Statistical significance: p < 0.01
+- Business impact: > 2x minimum meaningful effect
+- Confidence interval: Entirely positive
+- No guardrail violations
+
+**Medium Risk Decisions (Ship with Monitoring)**
+- Statistical significance: 0.01 < p < 0.05
+- Business impact: 1-2x minimum meaningful effect
+- Confidence interval: Mostly positive, small negative tail
+- Minor guardrail concerns
+
+**High Risk Decisions (Extended Testing)**
+- Statistical significance: Borderline (p ≈ 0.05)
+- Business impact: Close to minimum threshold
+- Confidence interval: Includes zero or negative values
+- Guardrail violations present
+
+#### Example Decision Output
 
 ```python
 decision_report = {

@@ -4,7 +4,7 @@
 
 ### What is A/B Testing?
 
-**A/B testing** (also called split testing) is a randomized controlled experiment that compares two or more variants of a product feature, algorithm, or user experience to determine which performs better on specific business metrics.
+**A/B testing** (also called split testing) is a randomized controlled experiment that compares two or more versions of a product feature, algorithm, or user experience to determine which performs better on specific business metrics.
 
 ### Core Goals of A/B Testing
 
@@ -18,7 +18,7 @@
 
 #### 1. **Hypothesis Formation**
 ```
-H₀ (Null): No difference between variants A and B
+H₀ (Null): No difference between variant A and variant B
 H₁ (Alternative): Variant B performs better than variant A by at least X%
 ```
 
@@ -27,6 +27,78 @@ H₁ (Alternative): Variant B performs better than variant A by at least X%
 * **Traffic Allocation**: Determine split ratio (50/50, 90/10, etc.)
 * **Success Metrics**: Primary and secondary metrics to measure
 * **Guardrail Metrics**: Metrics that must not be negatively affected
+
+> **Important design principle of this framework**  
+> This framework is intentionally **not** an experimentation platform. It does not decide *who* sees control or treatment and it does not collect raw logs. Those responsibilities stay in your own product / experimentation system. This package assumes you already have:
+>
+> 1. An **assignment table**: `unit_id → variant_label` (produced by your assignment logic, e.g., values like "control" or "treatment")
+> 2. An **events/metrics table**: logs of what happened for each `unit_id`
+>
+> Given only these inputs and your metric definitions, the framework focuses purely on the **math and methodology**: sample size, hypothesis tests, monitoring, and Go/NoGo decisions.
+
+### Who Does What: Experimentation System vs. Analysis Framework
+
+To keep responsibilities clean and avoid mixing concerns, we explicitly separate:
+
+#### 1. Experimentation / Product / Logging System (Upstream)
+
+This is your existing system that owns **traffic and logging**. It is responsible for:
+
+* **Randomization & Routing**
+    * Choose the **unit of randomization** (`unit_id` such as `user_id`, `conversation_id`, `session_id`)
+    * Assign each unit to a **variant label** (e.g., `control`, `treatment`, `variant_A`, `variant_B`, `shadow_variant_B`)
+    * For **shadow testing**:
+        * Route all real user responses from the **control** variant
+        * In parallel, send a copy of the same requests to a **shadow variant** (e.g., `shadow_variant_B`), but never expose its outputs to users
+
+* **Data Capture**
+    * Produce an **assignment table**, for example:
+
+        ```text
+        unit_id | variant_label      | assignment_timestamp | mode
+        ------- | ------------------ | -------------------- | ------
+        U1      | control            | 2025-11-10T10:00:00Z | live
+        U1      | shadow_variant_B   | 2025-11-10T10:00:00Z | shadow
+        ```
+
+    * Produce an **events/metrics table**, for example:
+
+        ```text
+        unit_id | variant_label      | metric_value | timestamp           | ...
+        ------- | ------------------ | ------------ | ------------------- | ---
+        U1      | control            | 0.031        | 2025-11-10T10:00:01Z| ...
+        U1      | shadow_variant_B   | 0.029        | 2025-11-10T10:00:01Z| ...
+        ```
+
+* **Shadow Awareness**
+    * Knows which variants are **shadow-only** vs. user-visible
+    * Ensures user experience is **never** impacted by shadow outputs
+
+#### 2. A/B Analysis Framework (This Package)
+
+This framework sits **on top of** the experimentation system and owns **math and decisions**, not routing. It:
+
+* Treats `unit_id` and `variant_label` as **opaque data**
+    * It doesn't know or care whether `variant_label` is `control`, `variant_B`, or `shadow_variant_B` beyond grouping and comparison
+
+* Provides **metric abstraction**
+    * You pass in a metric function, e.g.:
+
+        ```python
+        def metric(df: pd.DataFrame) -> float:
+                return df["conversions"].sum() / df["visitors"].sum()
+        ```
+
+* Implements the **statistical engine**
+    * Aggregates data by `unit_id` and `variant_label`
+    * Computes per-variant metrics
+    * Runs hypothesis tests, confidence intervals, power/sample size, etc.
+
+* Drives **Go/NoGo decisions**
+    * Compares any pair of variants (e.g., `control` vs `shadow_variant_B` during shadow, `control` vs `variant_B` during A/B)
+    * Produces structured recommendations (GO / NO-GO / EXTEND / INCONCLUSIVE)
+
+From the framework's point of view, **shadow variants are just additional variant labels**. The special behavior of "shadow" (not user-visible, used only for pre-A/B validation) is enforced entirely by the upstream system.
 
 ### Choosing the Unit of Randomization vs. Unit of Analysis
 
@@ -56,7 +128,7 @@ Both choices are legitimate, but they answer **slightly different questions** an
 
 **What it means**
 
-* Each user is assigned once to a variant (A or B)
+* Each user is assigned once to an experiment variant (e.g., variant A or variant B — in many systems named control and treatment)
 * All conversations for that user follow the same variant during the experiment
 
 **Pros**
@@ -90,12 +162,12 @@ In this framework, if you randomize by `user_id`, you should also **analyze metr
 **Pros**
 
 * Many more units (conversations) → potentially **shorter tests** for **conversation-level** metrics
-* Direct answer to: "Does variant B improve metrics **per conversation**?"
+* Direct answer to: "Does the treatment improve metrics **per conversation**?"
 
 **Cons**
 
-* The same user can experience **mixed behavior** (sometimes A, sometimes B)
-* User-level interpretation becomes more complex (each user sees a blend of both variants)
+* The same user can experience **mixed behavior** (sometimes variant A, sometimes variant B)
+* User-level interpretation becomes more complex (each user sees a blend of both variants / treatments)
 * Conversations from the same user are often **correlated**; naive per-conversation analysis can **overstate significance** unless you use clustered/robust methods
 
 **When to prefer `conversation_id` as unit**
@@ -107,7 +179,7 @@ In this framework, if you randomize by `user_id`, you should also **analyze metr
 If you randomize by `conversation_id`, the framework should either:
 
 * Analyze at **conversation level** with appropriate **cluster-robust** methods (cluster by `user_id`), or
-* Aggregate to **user level** first and accept that each user may have seen both variants (more complex interpretation).
+* Aggregate to **user level** first and accept that each user may have seen both treatments (more complex interpretation).
 
 #### Practical Guidance for This Framework
 
@@ -119,7 +191,7 @@ For most product scenarios (including the bot use case), the recommended **defau
 Conversation-level randomization (`conversation_id`) is still valid, but should be a deliberate choice when:
 
 * The experiment is focused on **conversation-level operations**, and
-* You are comfortable with users seeing a **mix of variants**, and
+* You are comfortable with users seeing a **mix of variants (e.g., control/treatment or A/B) within the same user**, and
 * You adjust your statistical analysis to respect the correlation between conversations of the same user.
 
 In short:
@@ -132,6 +204,80 @@ In short:
 * **Statistical Power (1-β)**: How likely your experiment is to catch a real improvement when there actually is one. Technically, this is the probability of detecting true effect when it exists (Type II error), typically 0.8 = 80% chance of spotting real changes
 * **Minimum Detectable Effect (MDE)**: Minimum meaningful difference you want to be able to detect
 * **Sample Size**: Number of units needed for reliable results
+
+### 🧮 Math Cheat‑Sheet: What This Framework Computes
+
+At a high level, the framework’s statistical engine answers:
+
+> "Given my baseline performance, desired minimum detectable effect (MDE), significance level (α), and power, how many units do I need — and, once I have data, is the observed difference real or just noise?"
+
+We mainly use:
+
+* **Proportion tests** for rate metrics (e.g., conversion, CTR)
+* **Mean tests** for continuous metrics (e.g., revenue per user, time)
+* **Confidence intervals** to express uncertainty around the estimated lift
+
+#### A) Proportion / rate metrics (conversion rate, CTR, etc.)
+
+Let:
+
+* $p_A$ = conversion rate in control  
+* $p_B$ = conversion rate in treatment  
+* $n_A$, $n_B$ = sample sizes per group  
+* $\Delta = p_B - p_A$ = absolute difference
+
+Approximate **standard error** of a proportion near baseline $p$ (for planning):
+
+$$
+	ext{SE}(p) \approx \sqrt{\frac{p(1-p)}{n}}
+$$
+
+For the **difference in proportions** during analysis, we use a pooled standard error and compute a z‑statistic:
+
+$$
+Z = \frac{\Delta}{\text{SE}_\text{pooled}}
+$$
+
+A stats library then converts $Z$ into a **p‑value**; if $p_\text{value} < \alpha$, the result is *statistically significant*.
+
+#### B) Continuous metrics (revenue per user, time, etc.)
+
+Let:
+
+* $\mu_A$, $\mu_B$ = sample means per group  
+* $s_A$, $s_B$ = sample standard deviations  
+* $n_A$, $n_B$ = sample sizes
+
+The **standard error of the mean** is approximately:
+
+$$
+	ext{SE}(\mu) \approx \frac{s}{\sqrt{n}}
+$$
+
+For the difference in means, we use a (Welch) **t‑test**:
+
+$$
+t = \frac{\mu_B - \mu_A}{\text{SE}_\text{diff}}
+$$
+
+Again, a stats library converts $t$ into a p‑value and confidence interval.
+
+#### C) Sample size for proportion metrics
+
+For a proportion metric with equal split between control and treatment, a standard approximation for **required sample size per group** is:
+
+$$
+n_{\text{per group}} \approx 2 \cdot (Z_{\alpha/2} + Z_{\beta})^2 \cdot \frac{p(1-p)}{\text{MDE}^2}
+$$
+
+Where:
+
+* $Z_{\alpha/2}$ = critical value for significance level (e.g., 1.96 for $\alpha = 0.05$)  
+* $Z_{\beta}$ = critical value for power (e.g., 0.84 for power = 0.8)  
+* $p$ = baseline rate (e.g., current conversion rate)  
+* **MDE** = absolute minimum detectable effect (e.g., 10% relative lift on 3.2% → 0.0032 absolute)
+
+This is the formula implemented by functions like `calculate_sample_size(...)` in this framework.
 
 ---
 
@@ -151,7 +297,9 @@ In short:
 ### During Experiment
 
 * **Data Quality Monitoring**: Check for Sample Ratio Mismatch (SRM) and other data issues
+    * **SRM math**: Use a χ² (chi‑square) goodness‑of‑fit test to compare observed counts per variant vs. the expected split (e.g., 50/50). A significant χ² indicates broken randomization, logging, or filtering, and results should be treated as **INCONCLUSIVE** until fixed.
 * **Sequential Analysis**: Monitor experiment progress without compromising statistical validity
+    * **Sequential looks**: Every unplanned peek at the p‑value increases your overall false‑positive rate. If you plan interim looks, use **alpha‑spending** or **group‑sequential** boundaries so the total experiment‑level α stays at your configured value (e.g., 0.05).
 * **Interim Analysis**: Provide updates while maintaining experiment integrity
 * **Issue Detection**: Identify technical problems or unexpected behavior patterns
 
@@ -181,7 +329,7 @@ In short:
   * Example: Baseline = 70% (0.7), MDE = 10% relative improvement
   * Calculation: 0.7 × (1 + 0.10) = 0.7 × 1.10 = 0.77 (77%)
   * So we're testing: 70% → 77% (not 70% → 80%)
-* **Traffic Allocation**: Proportion of users in each variant
+* **Traffic Allocation**: Proportion of users in each variant (control vs. treatment)
   * Example: 50/50 split vs. 90/10 split
 
 #### Metric Type Considerations
@@ -197,7 +345,7 @@ For **proportion metrics** with equal allocation:
 n = 2 × (Z_α/2 + Z_β)² × p̂(1-p̂) / (MDE)²
 
 Where:
-- n = sample size per variant
+- n = sample size per variant (control or treatment)
 - Z_α/2 = critical value for significance level
 - Z_β = critical value for power
 - p̂ = baseline proportion
@@ -237,7 +385,7 @@ mde = baseline_rate * meaningful_lift  # 0.0032 (0.32 percentage points)
 traffic_allocation = {"control": 0.50, "treatment": 0.50}  # 50/50 split
 experiment_traffic_pct = sum(traffic_allocation.values())  # 1.0 = 100% of users
 
-# Step 4: Calculate required sample size per variant
+# Step 4: Calculate required sample size per variant (control/treatment)
 sample_size_per_variant = calculate_sample_size(alpha, power, baseline_rate, mde)
 total_sample_size = sample_size_per_variant * len(traffic_allocation)
 
@@ -257,21 +405,20 @@ print(f"Estimated duration: {duration_days} days")
 ```python
 def calculate_experiment_duration(required_sample_size, daily_traffic, 
                                   experiment_traffic_pct, buffer_factor=1.2):
-    """
-    Calculate required experiment duration
-    
+    """Calculate required experiment duration.
+
     Args:
-        required_sample_size: Total sample size needed across all variants
-        daily_traffic: Average daily users/sessions
-        experiment_traffic_pct: Fraction of traffic in experiment (0.0-1.0)
-        buffer_factor: Safety buffer for traffic fluctuations (default 20%)
-    
+        required_sample_size: Total sample size needed across all variants.
+        daily_traffic: Average daily users/sessions.
+        experiment_traffic_pct: Fraction of total traffic in the experiment (0.0–1.0).
+        buffer_factor: Safety buffer for traffic fluctuations (default 1.2 = 20%).
+
     Returns:
         dict: Duration info including days, expected sample size, etc.
     """
     daily_experiment_users = daily_traffic * experiment_traffic_pct
     duration_days = math.ceil((required_sample_size * buffer_factor) / daily_experiment_users)
-    
+
     return {
         "duration_days": duration_days,
         "daily_experiment_users": daily_experiment_users,
@@ -303,15 +450,15 @@ duration_info = calculate_experiment_duration(
 **Example Scenarios:**
 ```python
 # Scenario 1: High traffic site, full allocation
-calc_duration(required_sample_size=100000, daily_traffic=50000, experiment_traffic_pct=1.0)
+calculate_experiment_duration(required_sample_size=100000, daily_traffic=50000, experiment_traffic_pct=1.0)
 # Result: ~3 days
 
 # Scenario 2: Conservative allocation (50% of users)
-calc_duration(required_sample_size=100000, daily_traffic=50000, experiment_traffic_pct=0.5)
+calculate_experiment_duration(required_sample_size=100000, daily_traffic=50000, experiment_traffic_pct=0.5)
 # Result: ~5 days
 
 # Scenario 3: Lower traffic site
-calc_duration(required_sample_size=100000, daily_traffic=5000, experiment_traffic_pct=1.0)
+calculate_experiment_duration(required_sample_size=100000, daily_traffic=5000, experiment_traffic_pct=1.0)
 # Result: ~24 days
 ```
 
@@ -331,8 +478,8 @@ aa_test = {
     "control": "variant_A",
     "treatment": "variant_A",  # Same as control!
     "traffic_allocation": {
-        "control": 0.50,          # 50% get control (variant_A)
-        "treatment": 0.50         # 50% get treatment (also variant_A!)
+    "control": 0.50,          # 50% get control (control_model)
+    "treatment": 0.50         # 50% get treatment (also control_model!)
     },
     # total_experiment_traffic = sum(traffic_allocation) = 1.0 (calculated automatically)
     "duration_days": aa_duration["duration_days"]  # Calculated: typically 2-3 days
@@ -371,8 +518,8 @@ ab_duration_conservative = calculate_experiment_duration(
 
 # Option 1: 50/50 split of ALL traffic
 ab_test_full = {
-    "control": "variant_A",           # Current version - 50% of users
-    "treatment": "variant_B",         # New version - 50% of users
+    "control": "variant_A",       # Current version - 50% of users
+    "treatment": "variant_B",   # New version - 50% of users
     "traffic_allocation": {
         "control": 0.50,              # 50% get control
         "treatment": 0.50             # 50% get treatment
@@ -383,8 +530,8 @@ ab_test_full = {
 
 # Option 2: Conservative split - only 50% of users in experiment
 ab_test_conservative = {
-    "control": "variant_A",           # Current version - 25% of users  
-    "treatment": "variant_B",         # New version - 25% of users
+    "control": "variant_A",       # Current version - 25% of users  
+    "treatment": "variant_B",   # New version - 25% of users
     "traffic_allocation": {
         "control": 0.25,              # 25% get control
         "treatment": 0.25             # 25% get treatment
@@ -403,8 +550,8 @@ ab_duration_uneven = calculate_experiment_duration(
 )
 
 ab_test_uneven = {
-    "control": "variant_A",           # Current version - 90% of experiment users
-    "treatment": "variant_B",         # New version - 10% of experiment users  
+    "control": "variant_A",       # Current version - 90% of experiment users
+    "treatment": "variant_B",   # New version - 10% of experiment users  
     "traffic_allocation": {
         "control": 0.90,              # 90% get control
         "treatment": 0.10             # 10% get treatment
@@ -469,6 +616,12 @@ Making the right decision requires both **statistical significance** and **busin
 #### Detailed Decision Criteria
 
 **1. Statistical Significance Check**
+
+Use this when you want a simple, reusable way to answer: *“Is the observed difference statistically significant at my chosen alpha?”*.
+
+- **Inputs**: a `p_value` from your statistical test and an `alpha` threshold (default 0.05).
+- **Outputs**: a small dict saying whether the result is significant and what confidence level it corresponds to.
+- **Typical usage**: call this right after computing a test statistic/p-value for your primary metric.
 ```python
 def check_statistical_significance(p_value, alpha=0.05):
     return {
@@ -480,6 +633,12 @@ def check_statistical_significance(p_value, alpha=0.05):
 ```
 
 **2. Business Significance Assessment**
+
+Use this to answer: *“Even if the result is statistically significant, is the size of the effect big enough to matter for the business?”*.
+
+- **Inputs**: `observed_lift` (relative or absolute, but consistent with your MDE definition) and `minimum_meaningful_effect` (your MDE).
+- **Outputs**: a dict indicating whether the observed lift clears the practical-impact bar and echoing the thresholds used.
+- **Typical usage**: run this alongside the statistical check so you don’t ship tiny, economically irrelevant wins.
 ```python
 def check_business_significance(observed_lift, minimum_meaningful_effect):
     return {
@@ -491,22 +650,45 @@ def check_business_significance(observed_lift, minimum_meaningful_effect):
 ```
 
 **3. Data Quality Validation**
+
+Use this before trusting any experiment result, to make sure the underlying data and execution are sound.
+
+- **Inputs**: a `results` summary object containing basic counts, durations, and health indicators for the experiment.
+- **Checks**: sample ratio mismatch, minimum sample size, planned vs. actual duration, external events, and pipeline health.
+- **Outputs**: a dict with `is_high_quality`, the per-check flags, and a list of failed check names.
+- **Typical usage**: call this once per experiment run and feed its output into the decision function below.
 ```python
 def check_data_quality(results):
-    quality_checks = {
+    checks = {
         "sample_ratio_mismatch": abs(results['control_n'] / results['treatment_n'] - 1) < 0.05,
         "sufficient_sample_size": results['total_n'] >= results['required_n'],
         "experiment_duration": results['actual_days'] >= results['planned_days'],
         "no_external_interference": results['external_events'] == [],
         "data_pipeline_health": results['missing_data_rate'] < 0.01
     }
-    return all(quality_checks.values()), quality_checks
+    is_high_quality = all(checks.values())
+    failed_checks = [name for name, ok in checks.items() if not ok]
+    return {
+        "is_high_quality": is_high_quality,
+        "checks": checks,
+        "failed_checks": failed_checks
+    }
 ```
 
 #### Decision Tree Algorithm
 
 ```python
 def make_go_nogo_decision(statistical_result, business_result, quality_result):
+        """Combine stats, business impact, and data quality into a single decision.
+
+        - Call this after you have:
+            - `statistical_result` from `check_statistical_significance`,
+            - `business_result` from `check_business_significance`, and
+            - `quality_result` from `check_data_quality`.
+
+        It applies a consistent policy to return one of: GO, NO-GO, EXTEND, or INCONCLUSIVE,
+        along with a short explanation and recommended next action.
+        """
     
     # Check data quality first
     if not quality_result['is_high_quality']:
@@ -715,7 +897,7 @@ Where correction_factor depends on:
 
 ## 7. 🎯 Framework Purpose and Vision
 
-A **generic, reusable A/B testing analysis framework** in Python — a package that is **agnostic to the product domain**, **metric type**, and **variant design**, yet flexible enough to plug into *any system* where A/B experiments run (web UI, backend algorithms, etc.).
+A **generic, reusable A/B testing analysis framework** in Python — a package that is **agnostic to the product domain**, **metric type**, and **treatment design**, yet flexible enough to plug into *any system* where A/B experiments run (web UI, backend algorithms, etc.).
 
 ### Core Mission
 
@@ -731,10 +913,10 @@ A **generic, reusable A/B testing analysis framework** in Python — a package t
 
 The framework integrates with a **running experimentation system** that:
 
-* Controls **traffic allocation** between A and B variants
+* Controls **traffic allocation** between control and treatment variants
 * Allows **defining randomization rules** (percentage, user/session-based)
 * Produces **log files or data streams** that include:
-  * Population assignment (unit_id → variant A/B)
+    * Population assignment (unit_id → treatment label such as control/treatment)
   * Events or actions to measure
   * Data available for on-demand querying
 
@@ -764,7 +946,7 @@ User (analyst or experiment owner) defines:
       return (df["clicks"].sum() / df["views"].sum())
   ```
 
-  This ensures full flexibility — the framework only requires a single numeric output per unit or per variant group.
+    This ensures full flexibility — the framework only requires a single numeric output per unit or per treatment variant.
 
 * **Experiment configuration**:
 
@@ -786,12 +968,12 @@ User (analyst or experiment owner) defines:
 
 * **On-demand data fetching**: Read all experiment data since experiment start when `get_latest_analysis()` is called
 * **Data sources**: Supports logs (local files, S3, blob storage), databases, or data streams
-* **Processing**: Clean and preprocess data (deduplicate, handle missing data, ensure correct variant assignment)
-* **Aggregation**: Aggregate by `unit_id` and variant (A/B) to produce:
+* **Processing**: Clean and preprocess data (deduplicate, handle missing data, ensure correct treatment assignment)
+* **Aggregation**: Aggregate by `unit_id` and `variant_label` (with values such as control/treatment) to produce:
 
-  ```
-  unit_id | variant | metric_value | timestamp
-  ```
+    ```
+        unit_id | variant_label | metric_value | timestamp
+    ```
 
 **Key Benefits**:
 * ✅ Simpler architecture (no schedulers, no background processes)
@@ -823,11 +1005,11 @@ The statistical layer should be modular (so one can plug frequentist or Bayesian
 
 * **On-demand dashboards** showing:
   * Sample size progress vs. required size
-  * Variant balance check (traffic allocation validation)
+    * Control vs. treatment balance check (traffic allocation validation)
   * Metric drift and variance trends
   * Statistical significance at time of request
 * **Analysis results** returned include:
-  * Current metrics for each variant
+    * Current metrics for control and treatment
   * Statistical test results (p-values, confidence intervals)
   * Sample size adequacy assessment
   * SRM check results
@@ -955,6 +1137,15 @@ The framework supports shadow testing through:
 * **Statistical Comparison**: Compare shadow vs. control using paired statistical tests
 * **Risk Assessment**: Evaluate readiness for A/B testing based on shadow results
 
+### Shadow Testing: Math View
+
+Because **control** and **shadow** see the exact same requests at the same time, we can often treat their outcomes as **paired** observations:
+
+* For **continuous metrics** (e.g., per‑request latency), a **paired t‑test** compares the mean difference per request between control and shadow.
+* For **binary / yes‑no metrics** on the same request (e.g., "did this violate a safety rule?"), **McNemar’s test** checks whether shadow meaningfully changes the pattern of successes vs. failures.
+
+This usually gives more statistical power than treating control and shadow as two independent samples, and it is exactly what the framework’s "shadow vs. control" backend comparisons are designed to support.
+
 ### Shadow Testing Configuration
 
 ```yaml
@@ -985,7 +1176,7 @@ shadow_experiment:
 
 ### Data Contracts
 
-1. **Assignment table**: `unit_id`, `variant`, `timestamps`
+1. **Assignment table**: `unit_id`, `variant_label` (e.g., control/treatment), `timestamps`
 2. **Event table**: raw telemetry data
 3. **Analysis table**: aggregated metrics
 4. **Pre-period table**: for variance reduction (optional)

@@ -8,6 +8,12 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 from typing import Dict, Any
+import sys
+import os
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(__file__))
+from format_results import format_conclusion, format_multi_metric_conclusion
 
 def calculate_proportion_test(
     successes_a: int,
@@ -110,14 +116,19 @@ def calculate_ttest(
         'n_b': n_b
     }
 
-def scenario1_ground_truth(file_path: str = "verification/data/scenario1_conversion.csv") -> Dict[str, Any]:
+def scenario1_ground_truth(file_path: str = "data/scenario1_conversion.csv") -> Dict[str, Any]:
     """
     Ground truth for Scenario 1: Simple Conversion Rate Test
+    
+    NEW: Impression-level data - aggregate to user level first
     """
     df = pd.read_csv(file_path)
     
-    df_a = df[df['variant'] == 'A']
-    df_b = df[df['variant'] == 'B']
+    # Aggregate to user level: did user convert in ANY impression?
+    user_conversions = df.groupby(['user_id', 'variant'])['converted'].max().reset_index()
+    
+    df_a = user_conversions[user_conversions['variant'] == 'A']
+    df_b = user_conversions[user_conversions['variant'] == 'B']
     
     successes_a = df_a['converted'].sum()
     n_a = len(df_a)
@@ -127,107 +138,113 @@ def scenario1_ground_truth(file_path: str = "verification/data/scenario1_convers
     result = calculate_proportion_test(successes_a, n_a, successes_b, n_b)
     result['scenario'] = 'Scenario 1: Conversion Rate'
     result['test_type'] = 'Two-proportion z-test'
+    result['note'] = f'Aggregated from {len(df)} impressions to {len(user_conversions)} users'
     
     return result
 
-def scenario2_ground_truth(file_path: str = "verification/data/scenario2_revenue.csv") -> Dict[str, Any]:
+def scenario2_ground_truth(file_path: str = "data/scenario2_revenue.csv") -> Dict[str, Any]:
     """
     Ground truth for Scenario 2: Revenue per Active User
-    Custom metric: revenue divided by number of active users (sessions > 0)
+    
+    NEW: Session-level data - aggregate to user level
+    Custom metric: total session revenue per active user
     """
     df = pd.read_csv(file_path)
     
-    # Filter to active users only
-    df_active = df[df['sessions'] > 0]
+    # Aggregate session revenue to user level
+    user_revenue = df.groupby(['user_id', 'variant'])['session_revenue'].sum().reset_index()
     
-    # Group by variant and calculate per-user revenue
-    df_a = df_active[df_active['variant'] == 'A']
-    df_b = df_active[df_active['variant'] == 'B']
+    # Split by variant
+    df_a = user_revenue[user_revenue['variant'] == 'A']
+    df_b = user_revenue[user_revenue['variant'] == 'B']
     
-    # Revenue per active user (each row is a user)
-    revenue_a = df_a['revenue'].values
-    revenue_b = df_b['revenue'].values
+    # Revenue per active user
+    revenue_a = df_a['session_revenue'].values
+    revenue_b = df_b['session_revenue'].values
     
     result = calculate_ttest(revenue_a, revenue_b)
     result['scenario'] = 'Scenario 2: Revenue per Active User'
     result['test_type'] = 'Welch\'s t-test'
-    result['note'] = 'Only active users (sessions > 0) included'
+    result['note'] = f'Aggregated from {len(df)} sessions to {len(user_revenue)} active users'
     
     return result
 
-def scenario3_ground_truth(file_path: str = "verification/data/scenario3_ctr.csv") -> Dict[str, Any]:
+def scenario3_ground_truth(file_path: str = "data/scenario3_ctr.csv") -> Dict[str, Any]:
     """
-    Ground truth for Scenario 3: CTR with Exposure Filtering
-    Custom metric: clicks / impressions for exposed users only
-    """
-    df = pd.read_csv(file_path)
+    Ground truth for Scenario 3: CTR (Click-Through Rate)
     
-    # Filter to exposed users only
-    df_exposed = df[df['exposed'] == 1]
-    
-    df_a = df_exposed[df_exposed['variant'] == 'A']
-    df_b = df_exposed[df_exposed['variant'] == 'B']
-    
-    # Total clicks and impressions
-    clicks_a = df_a['clicks'].sum()
-    impressions_a = df_a['impressions'].sum()
-    clicks_b = df_b['clicks'].sum()
-    impressions_b = df_b['impressions'].sum()
-    
-    # Use proportion test treating total clicks as successes, impressions as trials
-    result = calculate_proportion_test(clicks_a, impressions_a, clicks_b, impressions_b)
-    result['scenario'] = 'Scenario 3: CTR with Exposure'
-    result['test_type'] = 'Two-proportion z-test (aggregated)'
-    result['note'] = 'Only exposed users included, aggregated clicks/impressions'
-    
-    return result
-
-def scenario4_ground_truth(file_path: str = "verification/data/scenario4_multi.csv") -> Dict[str, Any]:
-    """
-    Ground truth for Scenario 4: Multi-Metric Dashboard
-    Multiple metrics tested simultaneously
+    Impression-level data - each row is one impression
+    CTR = total clicks / total impressions
     """
     df = pd.read_csv(file_path)
     
     df_a = df[df['variant'] == 'A']
     df_b = df[df['variant'] == 'B']
     
+    # Total clicks and impressions (each row is one impression)
+    clicks_a = df_a['clicked'].sum()
+    impressions_a = len(df_a)
+    clicks_b = df_b['clicked'].sum()
+    impressions_b = len(df_b)
+    
+    # Use proportion test treating total clicks as successes, impressions as trials
+    result = calculate_proportion_test(clicks_a, impressions_a, clicks_b, impressions_b)
+    result['scenario'] = 'Scenario 3: CTR (Click-Through Rate)'
+    result['test_type'] = 'Two-proportion z-test'
+    result['note'] = f'Impression-level analysis: {len(df)} impressions from {df["user_id"].nunique()} users'
+    
+    return result
+
+def scenario4_ground_truth(file_path: str = "data/scenario4_multi.csv") -> Dict[str, Any]:
+    """
+    Ground truth for Scenario 4: Multi-Metric Dashboard
+    
+    NEW: Session-level data - aggregate to user level for metrics
+    Multiple metrics tested simultaneously
+    """
+    df = pd.read_csv(file_path)
+    
+    # Aggregate to user level for different metrics
+    user_metrics = df.groupby(['user_id', 'variant']).agg({
+        'converted_this_session': 'max',  # Did user convert in any session?
+        'order_value': 'sum',  # Total order value
+        'session_revenue': 'sum'  # Total revenue
+    }).reset_index()
+    
+    df_a = user_metrics[user_metrics['variant'] == 'A']
+    df_b = user_metrics[user_metrics['variant'] == 'B']
+    
     results = {}
     
     # Metric 1: Conversion Rate
-    successes_a = df_a['converted'].sum()
+    successes_a = int(df_a['converted_this_session'].sum())
     n_a = len(df_a)
-    successes_b = df_b['converted'].sum()
+    successes_b = int(df_b['converted_this_session'].sum())
     n_b = len(df_b)
     results['conversion_rate'] = calculate_proportion_test(successes_a, n_a, successes_b, n_b)
     
     # Metric 2: Average Order Value (for converted users only)
-    converted_a = df_a[df_a['converted'] == 1]['order_value'].values
-    converted_b = df_b[df_b['converted'] == 1]['order_value'].values
+    converted_a = df_a[df_a['converted_this_session'] == 1]['order_value'].values
+    converted_b = df_b[df_b['converted_this_session'] == 1]['order_value'].values
     results['avg_order_value'] = calculate_ttest(converted_a, converted_b)
     
     # Metric 3: Revenue per User (all users)
-    revenue_a = df_a['revenue'].values
-    revenue_b = df_b['revenue'].values
+    revenue_a = df_a['session_revenue'].values
+    revenue_b = df_b['session_revenue'].values
     results['revenue_per_user'] = calculate_ttest(revenue_a, revenue_b)
     
-    # Metric 4: Time to Conversion (for converted users only)
-    time_a = df_a[df_a['converted'] == 1]['time_to_conversion'].dropna().values
-    time_b = df_b[df_b['converted'] == 1]['time_to_conversion'].dropna().values
-    results['time_to_conversion'] = calculate_ttest(time_a, time_b)
-    
     # Bonferroni correction for multiple testing
-    n_tests = 4
+    n_tests = 3
     bonferroni_alpha = 0.05 / n_tests
     
     results['bonferroni_alpha'] = bonferroni_alpha
     results['scenario'] = 'Scenario 4: Multi-Metric Dashboard'
-    results['note'] = f'4 metrics tested, Bonferroni-corrected alpha = {bonferroni_alpha:.4f}'
+    results['note'] = f'Aggregated from {len(df)} sessions to {len(user_metrics)} users, 3 metrics tested, Bonferroni α = {bonferroni_alpha:.4f}'
     
     return results
 
-def print_result(result: Dict[str, Any], indent: int = 0):
-    """Pretty print test results"""
+def print_result(result: Dict[str, Any], indent: int = 0, metric_name: str = None, is_percentage: bool = False, currency: bool = False):
+    """Pretty print test results with professional conclusion"""
     prefix = "  " * indent
     
     if 'scenario' in result:
@@ -256,6 +273,109 @@ def print_result(result: Dict[str, Any], indent: int = 0):
         print(f"{prefix}95% CI: [{result['ci_lower']:.6f}, {result['ci_upper']:.6f}]")
         print(f"{prefix}Significant (α=0.05): {result['significant']}")
         print(f"{prefix}Sample sizes: A={result['n_a']}, B={result['n_b']}")
+        
+        # Add professional conclusion
+        if metric_name and indent == 0:  # Only for top-level results
+            conclusion = format_conclusion(
+                metric_name=metric_name,
+                variant_a_value=result['metric_a'],
+                variant_b_value=result['metric_b'],
+                p_value=result['p_value'],
+                ci_lower=result['ci_lower'],
+                ci_upper=result['ci_upper'],
+                is_percentage=is_percentage,
+                currency=currency
+            )
+            print(conclusion)
+
+def scenario5_ground_truth(file_path: str = "data/scenario5_resolved_with_gap.csv") -> Dict[str, Any]:
+    """
+    Ground truth for Scenario 5: Agent Bot - Resolved Rate WITH gap
+    
+    Session-level data - testing resolved rate (binary metric)
+    """
+    df = pd.read_csv(file_path)
+    
+    df_a = df[df['variant'] == 'A']
+    df_b = df[df['variant'] == 'B']
+    
+    # Resolved rate at session level
+    resolved_a = df_a['is_resolved'].sum()
+    n_a = len(df_a)
+    resolved_b = df_b['is_resolved'].sum()
+    n_b = len(df_b)
+    
+    result = calculate_proportion_test(resolved_a, n_a, resolved_b, n_b)
+    result['scenario'] = 'Scenario 5: Agent Bot - Resolved Rate (WITH gap)'
+    result['test_type'] = 'Two-proportion z-test'
+    result['note'] = f'Session-level analysis: {len(df)} sessions'
+    
+    return result
+
+def scenario6_ground_truth(file_path: str = "data/scenario6_resolved_no_gap.csv") -> Dict[str, Any]:
+    """
+    Ground truth for Scenario 6: Agent Bot - Resolved Rate NO gap
+    
+    Session-level data - testing resolved rate (should show NO significance)
+    """
+    df = pd.read_csv(file_path)
+    
+    df_a = df[df['variant'] == 'A']
+    df_b = df[df['variant'] == 'B']
+    
+    resolved_a = df_a['is_resolved'].sum()
+    n_a = len(df_a)
+    resolved_b = df_b['is_resolved'].sum()
+    n_b = len(df_b)
+    
+    result = calculate_proportion_test(resolved_a, n_a, resolved_b, n_b)
+    result['scenario'] = 'Scenario 6: Agent Bot - Resolved Rate (NO gap)'
+    result['test_type'] = 'Two-proportion z-test'
+    result['note'] = f'Session-level analysis: {len(df)} sessions'
+    
+    return result
+
+def scenario7_ground_truth(file_path: str = "data/scenario7_ai_metric_with_gap.csv") -> Dict[str, Any]:
+    """
+    Ground truth for Scenario 7: Agent Bot - AI Quality Metric WITH gap
+    
+    Session-level data - testing AI metric (continuous 0-5 score)
+    """
+    df = pd.read_csv(file_path)
+    
+    df_a = df[df['variant'] == 'A']
+    df_b = df[df['variant'] == 'B']
+    
+    ai_metric_a = df_a['ai_metric'].values
+    ai_metric_b = df_b['ai_metric'].values
+    
+    result = calculate_ttest(ai_metric_a, ai_metric_b)
+    result['scenario'] = 'Scenario 7: Agent Bot - AI Quality Metric (WITH gap)'
+    result['test_type'] = 'Welch\'s t-test'
+    result['note'] = f'Session-level analysis: {len(df)} sessions'
+    
+    return result
+
+def scenario8_ground_truth(file_path: str = "data/scenario8_ai_metric_no_gap.csv") -> Dict[str, Any]:
+    """
+    Ground truth for Scenario 8: Agent Bot - AI Quality Metric NO gap
+    
+    Session-level data - testing AI metric (should show NO significance)
+    """
+    df = pd.read_csv(file_path)
+    
+    df_a = df[df['variant'] == 'A']
+    df_b = df[df['variant'] == 'B']
+    
+    ai_metric_a = df_a['ai_metric'].values
+    ai_metric_b = df_b['ai_metric'].values
+    
+    result = calculate_ttest(ai_metric_a, ai_metric_b)
+    result['scenario'] = 'Scenario 8: Agent Bot - AI Quality Metric (NO gap)'
+    result['test_type'] = 'Welch\'s t-test'
+    result['note'] = f'Session-level analysis: {len(df)} sessions'
+    
+    return result
 
 def generate_all_ground_truths():
     """Calculate and display ground truth for all scenarios"""
@@ -266,15 +386,15 @@ def generate_all_ground_truths():
     
     # Scenario 1
     result1 = scenario1_ground_truth()
-    print_result(result1)
+    print_result(result1, metric_name="conversion rate", is_percentage=True)
     
     # Scenario 2
     result2 = scenario2_ground_truth()
-    print_result(result2)
+    print_result(result2, metric_name="revenue per active user", currency=True)
     
     # Scenario 3
     result3 = scenario3_ground_truth()
-    print_result(result3)
+    print_result(result3, metric_name="click-through rate (CTR)", is_percentage=True)
     
     # Scenario 4
     result4 = scenario4_ground_truth()
@@ -283,18 +403,41 @@ def generate_all_ground_truths():
     print('='*60)
     print(f"Note: {result4['note']}")
     
-    metrics = ['conversion_rate', 'avg_order_value', 'revenue_per_user', 'time_to_conversion']
-    metric_names = ['Conversion Rate', 'Average Order Value', 'Revenue per User', 'Time to Conversion']
+    metrics = ['conversion_rate', 'avg_order_value', 'revenue_per_user']
+    metric_names = ['Conversion Rate', 'Average Order Value', 'Revenue per User']
     
     for metric, name in zip(metrics, metric_names):
         print(f"\n  Metric: {name}")
         print_result(result4[metric], indent=1)
     
+    # Add multi-metric conclusion
+    multi_conclusion = format_multi_metric_conclusion(
+        {k: result4[k] for k in metrics},
+        bonferroni_alpha=result4['bonferroni_alpha']
+    )
+    print(multi_conclusion)
+    
+    # Scenario 5
+    result5 = scenario5_ground_truth()
+    print_result(result5, metric_name="resolved rate", is_percentage=True)
+    
+    # Scenario 6
+    result6 = scenario6_ground_truth()
+    print_result(result6, metric_name="resolved rate", is_percentage=True)
+    
+    # Scenario 7
+    result7 = scenario7_ground_truth()
+    print_result(result7, metric_name="AI quality metric (0-5 scale)")
+    
+    # Scenario 8
+    result8 = scenario8_ground_truth()
+    print_result(result8, metric_name="AI quality metric (0-5 scale)")
+    
     print("\n" + "="*70)
-    print("Ground truth calculations complete!")
+    print("Ground truth calculations complete for all 8 scenarios!")
     print("="*70)
     
-    return result1, result2, result3, result4
+    return result1, result2, result3, result4, result5, result6, result7, result8
 
 if __name__ == "__main__":
     generate_all_ground_truths()

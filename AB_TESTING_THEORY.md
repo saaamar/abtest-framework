@@ -603,3 +603,17 @@ Putting the three dimensions together gives a simple yet powerful **decision mat
 
 This separation of concerns (statistics vs. business vs. data quality) is central to how the package structures its APIs and outputs in `README.md`. The theory lives here; the concrete function signatures and example usage remain with the package documentation.
 
+---
+
+## 9. TODO / Open Theory Items
+
+This section tracks topics that we plan to elaborate on in future iterations of the theory docs. They are intentionally left as placeholders for deeper explanations, examples, and references.
+
+1. **When to use a two‑proportion z‑test vs. a Welch t‑test**  
+    At a high level, the current framework uses proportion tests for rate metrics (e.g., conversion, CTR) and Welch’s t‑test for continuous metrics (e.g., revenue per user, time). We plan to add a dedicated subsection clarifying **borderline cases** and **practical decision rules**, including:
+    * How to reason about metrics that are proportions but derived from user‑level aggregates.
+    * When normal approximations for proportions are reliable vs. when you should fall back to t‑tests on transformed or aggregated data.
+    * Concrete numerical examples comparing the two approaches on the same dataset.
+
+Additional TODO items can be added here as the framework evolves.
+

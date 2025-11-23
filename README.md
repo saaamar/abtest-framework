@@ -952,4 +952,13 @@ This framework will:
 7. Write comprehensive tests and documentation
 8. Pilot with real experiments and iterate based on feedback
 
+---
+
+## 20. TODO / Open Theory Items
+
+Some methodological topics are intentionally left for deeper treatment in the theory companion document. As a reminder to future contributors, one key pending item is:
+
+1. **When to use a two‑proportion z‑test vs. a Welch t‑test**  
+    See `AB_TESTING_THEORY.md` – Section 9, “TODO / Open Theory Items”, for a placeholder and future elaboration. The high‑level current guidance is that the framework uses proportion tests for rate metrics (e.g., conversion, CTR) and Welch’s t‑test for continuous metrics (e.g., revenue per user, time), but we plan to document more nuanced decision rules and examples.
+
 [^kohavi-unit]: For a detailed discussion of why the unit of randomization should match the unit of analysis, see Kohavi, Tang, Xu, and colleagues, *Trustworthy Online Controlled Experiments* (Cambridge University Press, 2020), and related controlled‑experiments literature.

@@ -1,3 +1,6 @@
+> Purpose: Analysis of the hybrid/orchestration architecture approach for the framework
+> Generated: Manually authored, maintained under version control.
+
 # Hybrid Approach: Orchestration Layer with Pluggable Statistical Backend
 
 **Date:** November 23, 2025  

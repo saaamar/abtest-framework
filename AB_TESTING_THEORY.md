@@ -1,3 +1,6 @@
+> Purpose: Statistical theory and mathematical background for A/B testing methodology
+> Generated: Manually authored, maintained under version control.
+
 [TOC]
 
 # 📘 A/B Testing Theory for the Dynamic A/B Testing Analysis Framework

@@ -1,3 +1,6 @@
+> Purpose: ADR for backend technology choice (owl_ab_test vs scipy) and hybrid approach rationale
+> Generated: Manually authored, maintained under version control.
+
 # Backend Selection: owl_ab_test vs abexp
 
 **Date:** November 23, 2025  

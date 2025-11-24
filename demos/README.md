@@ -1,3 +1,6 @@
+> Purpose: Overview of demo scripts and instructions on how to run them
+> Generated: Manually authored, maintained under version control.
+
 # AB Framework - Demo Files
 
 This directory contains ready-to-run demonstration files showcasing the AB Framework's capabilities.

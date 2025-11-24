@@ -554,7 +554,7 @@ def generate_scenario8_ai_metric_no_gap(
         split=split
     )
 
-def generate_all_scenarios(output_dir: str = "data"):
+def generate_all_scenarios(output_dir: str = "verification/data"):
     """Generate all 8 scenarios and save to CSV files"""
     
     print("Generating synthetic A/B test data...")

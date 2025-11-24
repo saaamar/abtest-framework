@@ -1,3 +1,6 @@
+> Purpose: Implementation summary documenting what was built in the ab_framework package
+> Generated: Manually authored, maintained under version control.
+
 # AB Framework Implementation Summary
 
 **Date:** November 23, 2025  

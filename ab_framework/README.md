@@ -1,3 +1,6 @@
+> Purpose: Package-level documentation for the ab_framework Python library (installation, usage, examples)
+> Generated: Manually authored, maintained under version control.
+
 # AB Testing Framework
 
 A production-ready A/B testing orchestration framework built on top of `owl_ab_test`, providing a clean, Pythonic API for experiment analysis.

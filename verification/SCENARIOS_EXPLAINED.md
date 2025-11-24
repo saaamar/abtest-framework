@@ -1,3 +1,6 @@
+> Purpose: Human-readable explanation of the 8 verification scenarios and their design
+> Generated: Manually authored, maintained under version control.
+
 # A/B Testing Verification Scenarios
 
 This document explains the different scenarios used in the verification framework.

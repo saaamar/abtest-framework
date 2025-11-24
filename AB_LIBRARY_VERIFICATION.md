@@ -1,3 +1,6 @@
+> Purpose: Verification methodology and package comparison results for evaluating A/B testing libraries
+> Generated: Manually authored, maintained under version control.
+
 # 🧪 A/B Testing Package Verification Plan
 
 ## Purpose

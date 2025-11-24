@@ -1,3 +1,6 @@
+> Purpose: Main project overview, installation instructions, quickstart guide, and comprehensive framework documentation.
+> Generated: Manually authored, maintained under version control.
+
 [TOC]
 
 # 🧠 Dynamic A/B Testing Analysis Framework

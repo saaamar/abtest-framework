@@ -1,3 +1,6 @@
+> Purpose: Presentation slides and script for demonstrating the A/B testing framework
+> Generated: Manually authored, maintained under version control.
+
 # Slide 0 – What is A/B Testing (in One Minute)
 
 - Compare two or more variants (A, B, …) on live traffic  

@@ -1,3 +1,6 @@
+> Purpose: Architecture Decision Record (ADR) explaining why we built a custom A/B testing framework instead of using existing packages
+> Generated: Manually authored, maintained under version control.
+
 # A/B Testing Framework Decision
 
 **Date:** November 23, 2025  

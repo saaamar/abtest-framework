@@ -1,3 +1,6 @@
+> Purpose: Description of features demonstrated by the demo_feature_showcase.py script
+> Generated: Manually authored, maintained under version control.
+
 ================================================================================
 AB FRAMEWORK - FEATURE SHOWCASE
 Comprehensive demonstration of all framework capabilities

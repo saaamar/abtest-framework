@@ -452,7 +452,7 @@ $$
 For $k = 5$ and $\alpha = 0.05$, this yields:
 
 $$
-1 - 0.95^5 \approx 0.226, \quad \text{or about a 22.6% chance of at least one spurious “win”.}
+1 - 0.95^5 \approx 0.226, \quad \text{or about a 22.6\% chance of at least one spurious win.}
 $$
 
 To keep your **family‑wise error rate (FWER)** under control, you can **adjust** the per‑metric significance level. The classic **Bonferroni correction** uses
@@ -616,4 +616,3 @@ This section tracks topics that we plan to elaborate on in future iterations of 
     * Concrete numerical examples comparing the two approaches on the same dataset.
 
 Additional TODO items can be added here as the framework evolves.
-

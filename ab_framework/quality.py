@@ -75,12 +75,12 @@ class QualityChecker:
         
         # Generate recommendation
         if passed:
-            recommendation = '✅ No SRM detected - randomization looks good'
+            recommendation = '[OK] No SRM detected - randomization looks good'
         else:
             max_dev_variant = max(deviations, key=lambda k: abs(deviations[k]))
             max_dev = deviations[max_dev_variant] * 100
             recommendation = (
-                f'⚠️ SRM DETECTED (p={p_value:.6f}, α={alpha})\n'
+                f'[WARNING] SRM DETECTED (p={p_value:.6f}, alpha={alpha})\n'
                 f'Variant {max_dev_variant} deviates by {max_dev:+.1f}%\n'
                 f'Action: Check randomization logic and data collection'
             )
@@ -132,7 +132,7 @@ class QualityChecker:
             metric_details = {}
             
             if metric not in df.columns:
-                issues.append(f'❌ Missing column: {metric}')
+                issues.append(f'[ERROR] Missing column: {metric}')
                 continue
             
             # Check missing values
@@ -143,7 +143,7 @@ class QualityChecker:
             
             if missing_pct > missing_threshold * 100:
                 issues.append(
-                    f'⚠️ {metric}: {missing_pct:.1f}% missing values '
+                    f'[WARNING] {metric}: {missing_pct:.1f}% missing values '
                     f'(threshold: {missing_threshold*100:.1f}%)'
                 )
             
@@ -167,7 +167,7 @@ class QualityChecker:
                     
                     if outlier_pct > outlier_threshold * 100:
                         issues.append(
-                            f'⚠️ {metric}: {outlier_pct:.1f}% outliers '
+                            f'[WARNING] {metric}: {outlier_pct:.1f}% outliers '
                             f'(threshold: {outlier_threshold*100:.1f}%)'
                         )
                     
@@ -182,10 +182,10 @@ class QualityChecker:
         passed = len(issues) == 0
         
         if passed:
-            recommendation = '✅ Data quality looks good - no issues detected'
+            recommendation = '[OK] Data quality looks good - no issues detected'
         else:
             recommendation = (
-                f'⚠️ Found {len(issues)} data quality issue(s)\n' +
+                f'[WARNING] Found {len(issues)} data quality issue(s)\n' +
                 '\n'.join(issues)
             )
         

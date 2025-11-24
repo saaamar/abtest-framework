@@ -358,7 +358,7 @@ class ExperimentResults:
         lines = []
         lines.append(f"# {self.experiment_name}")
         lines.append(f"**Analysis Date:** {self.timestamp}")
-        lines.append(f"**Significance Level:** α = {self.alpha}")
+        lines.append(f"**Significance Level:** alpha = {self.alpha}")
         if self.correction:
             lines.append(f"**Multiple Testing Correction:** {self.correction}")
         lines.append("")
@@ -375,12 +375,12 @@ class ExperimentResults:
         
         for metric_name, result in self.metric_results.items():
             if 'error' in result:
-                lines.append(f"### ❌ {metric_name}")
+                lines.append(f"### [ERROR] {metric_name}")
                 lines.append(f"Error: {result['error']}")
-                lines.append("")
-                continue
+
+            continue
             
-            sig_icon = '✅' if result['significant'] else '❌'
+            sig_icon = '[SIG]' if result['significant'] else '[NOT-SIG]'
             lines.append(f"### {sig_icon} {metric_name}")
             lines.append(f"- **Type:** {result['metric_type']}")
             lines.append(f"- **Control:** {result['control_value']:.4f} (n={result['sample_size_control']})")
@@ -389,7 +389,7 @@ class ExperimentResults:
             lines.append(f"- **P-value:** {result['p_value']:.6f}")
             lines.append(f"- **95% CI:** [{result['ci_lower']:.4f}, {result['ci_upper']:.4f}]")
             if 'adjusted_alpha' in result:
-                lines.append(f"- **Adjusted α:** {result['adjusted_alpha']:.4f}")
+                lines.append(f"- **Adjusted alpha:** {result['adjusted_alpha']:.4f}")
             lines.append("")
         
         return "\n".join(lines)
@@ -503,7 +503,7 @@ class ExperimentResults:
             if self.correction:
                 lines.append(
                     f"\nNote: Multiple testing correction applied ({self.correction}), "
-                    f"adjusted α = {alpha_used:.4f}."
+                    f"adjusted alpha = {alpha_used:.4f}."
                 )
         else:
             # Not significant
@@ -515,7 +515,7 @@ class ExperimentResults:
             )
             lines.append("")
             lines.append(
-                "⚠️  RECOMMENDATION: The treatment variant did not show a significant effect. "
+                "[!] RECOMMENDATION: The treatment variant did not show a significant effect. "
                 "Consider running the test longer or with a larger sample size, or abandon "
                 "this variant."
             )
@@ -523,7 +523,7 @@ class ExperimentResults:
             if self.correction:
                 lines.append(
                     f"\nNote: Multiple testing correction applied ({self.correction}), "
-                    f"adjusted α = {alpha_used:.4f}."
+                    f"adjusted alpha = {alpha_used:.4f}."
                 )
         
         lines.append("=" * 70)

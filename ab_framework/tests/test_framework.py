@@ -174,8 +174,8 @@ def test_multi_metric():
     
     # Check correction
     print(f"\nBonferroni Correction:")
-    print(f"Original α: 0.05")
-    print(f"Adjusted α: {0.05/3:.4f}")
+    print(f"Original alpha: 0.05")
+    print(f"Adjusted alpha: {0.05/3:.4f}")
     for metric, result in results.metric_results.items():
         if 'adjusted_alpha' in result:
             print(f"{metric}: adjusted_alpha = {result['adjusted_alpha']:.4f}")

@@ -93,7 +93,7 @@ def run_analysis_check(data, check_number, days_elapsed, target_lift, phase_name
 print("=" * 70)
 print("REAL-WORLD A/B TEST WORKFLOW")
 print("Testing AI Model v2.0 for Quality Metric Improvement")
-print("Complete Pipeline: A/A Test → Sample Size → A/B Test → Decision")
+print("Complete Pipeline: A/A Test -> Sample Size -> A/B Test -> Decision")
 print("=" * 70)
 
 # ============================================================================
@@ -162,7 +162,7 @@ Both groups got the SAME treatment, so any difference is just random noise.
 
 if aa_result['significant']:
     print(f"""
-❌ A/A TEST FAILED!
+[FAIL] A/A TEST FAILED!
 - Found significant difference (p = {aa_result['p_value']:.4f}) when there should be none
 - Control: {aa_result['control_mean']:.3f}, Treatment: {aa_result['treatment_mean']:.3f}
 - Difference: {observed_diff:.3f} (should be negligible but p < 0.05!)
@@ -172,7 +172,7 @@ This indicates a problem with:
   * Metric collection bias
   * Implementation bug
 
-⚠️  DO NOT PROCEED WITH A/B TEST until this is fixed!
+??  DO NOT PROCEED WITH A/B TEST until this is fixed!
 
 Next Steps:
   1. Check randomization logic
@@ -183,28 +183,28 @@ Next Steps:
     raise Exception("A/A test failed - cannot proceed")
 else:
     print(f"""
-✅ A/A TEST PASSED! ✅
+[OK] A/A TEST PASSED! [OK]
 
 Key Results:
-  - P-value: {aa_result['p_value']:.4f} (> 0.05 ✓) - This is GOOD!
+  - P-value: {aa_result['p_value']:.4f} (> 0.05 [OK]) - This is GOOD!
   - Control group: {aa_result['control_mean']:.3f} (n={aa_result['n_conversations']:,})
   - Treatment group: {aa_result['treatment_mean']:.3f} (n={aa_result['n_conversations']:,})
-  - Observed difference: {observed_diff:.3f} (negligible, not significant ✓)
-  - Observed lift: {aa_result['lift']:.2%} (< 2-3% is normal random noise ✓)
+  - Observed difference: {observed_diff:.3f} (negligible, not significant [OK])
+  - Observed lift: {aa_result['lift']:.2%} (< 2-3% is normal random noise [OK])
 
 What This Validates:
-  ✓ Randomization infrastructure is working correctly
-  ✓ No Sample Ratio Mismatch detected
-  ✓ Metric collection is accurate (no bias)
-  ✓ No implementation bugs causing spurious differences
+  [OK] Randomization infrastructure is working correctly
+  [OK] No Sample Ratio Mismatch detected
+  [OK] Metric collection is accurate (no bias)
+  [OK] No implementation bugs causing spurious differences
 
 Estimated Parameters for A/B Test:
   - Baseline mean: {aa_result['control_mean']:.3f}
   - Standard deviation: {observed_variance:.3f}
   
-✅ Infrastructure validated - Ready to proceed with A/B test!
+[OK] Infrastructure validated - Ready to proceed with A/B test!
 
-Note: The "❌ ai_metric" in the output above just means "not statistically 
+Note: The "[FAIL] ai_metric" in the output above just means "not statistically 
 significant" which is EXACTLY what we want in an A/A test! Both groups got 
 the same treatment, so we should NOT see a significant difference.
 """)
@@ -230,7 +230,7 @@ print(f"  - Standard Deviation: {baseline_std:.2f} (from A/A test)")
 print(f"  - Target Improvement: {target_lift:.1%} relative lift")
 print(f"  - Expected Treatment: {baseline_mean * (1 + target_lift):.2f}/5.0")
 print(f"  - Desired Power: {power:.0%}")
-print(f"  - Significance Level: α = {alpha}")
+print(f"  - Significance Level: alpha = {alpha}")
 print(f"  - Monitoring: Check every {check_frequency_days} days")
 
 # Calculate required sample size using A/A test parameters
@@ -328,7 +328,7 @@ while check_day <= total_duration_days:
     
     if check_result['significant']:
         print(f"""
-✅ SIGNIFICANT RESULT DETECTED!
+[OK] SIGNIFICANT RESULT DETECTED!
 - P-value: {check_result['p_value']:.4f} (< 0.05)
 - Observed lift: {check_result['lift']:.2%} (target was {target_lift:.1%})
 
@@ -336,22 +336,22 @@ Recommendation: Continue to planned sample size for:
   1. More precise effect size estimate
   2. Protection against false positive
   3. Consistency validation
-⏩ Continue and check again in 3 days
+? Continue and check again in 3 days
 """)
     else:
         print(f"""
-ℹ️  NO SIGNIFICANT RESULT YET
+??  NO SIGNIFICANT RESULT YET
 - P-value: {check_result['p_value']:.4f} (> 0.05)
 - Observed lift: {check_result['lift']:.2%}
 
 Reason: Still collecting data
-⏩ Continue and check again in 3 days
+? Continue and check again in 3 days
 """)
     
     # Check if target reached
     n_convs_current = df_current['conversation_id'].nunique()
     if n_convs_current >= sample_plan['total_size']:
-        print(f"\n✅ Reached target sample size ({n_convs_current:,} >= {sample_plan['total_size']:,})")
+        print(f"\n[OK] Reached target sample size ({n_convs_current:,} >= {sample_plan['total_size']:,})")
         print(f"   Moving to final analysis")
         break
     
@@ -401,10 +401,10 @@ treatment_value = result['treatment_value']
 if is_significant:
     improvement = treatment_value - control_value
     print(f"""
-✅ DECISION: SHIP AI MODEL v2.0
+[OK] DECISION: SHIP AI MODEL v2.0
 
 Rationale:
-  - A/A test validated infrastructure ✓
+  - A/A test validated infrastructure [OK]
   - Statistically significant improvement (p = {p_value:.4f})
   - Observed lift: {observed_lift:.2%}
   - Absolute improvement: +{improvement:.3f} points
@@ -420,16 +420,16 @@ Rollout Plan:
   4. Document improvement for future reference
   
 Expected Impact:
-  - AI metric: {control_value:.2f} → {treatment_value:.2f}
+  - AI metric: {control_value:.2f} -> {treatment_value:.2f}
   - +{improvement:.3f} points on 5-point scale
   - {observed_lift:.1%} relative improvement
 """)
 else:
     print(f"""
-❌ DECISION: DO NOT SHIP AI Model v2.0
+[FAIL] DECISION: DO NOT SHIP AI Model v2.0
 
 Rationale:
-  - A/A test validated infrastructure ✓
+  - A/A test validated infrastructure [OK]
   - No significant improvement (p = {p_value:.4f})
   - Observed lift: {observed_lift:.2%}
   - Duration: {total_duration_days:.1f} days
@@ -451,7 +451,7 @@ print(f"""
 Complete A/B Test Pipeline:
 
 Phase 0: A/A Testing (7 days)
-  - Validated randomization ✓
+  - Validated randomization [OK]
   - Estimated variance: {observed_variance:.3f}
   - Baseline mean: {aa_result['control_mean']:.3f}
   
@@ -477,7 +477,7 @@ comparison = pd.DataFrame([
         'Conversations': aa_result['n_conversations'],
         'Lift': f"{aa_result['lift']:.2%}",
         'P-value': f"{aa_result['p_value']:.4f}",
-        'Status': '✅ Pass' if not aa_result['significant'] else '❌ Fail'
+        'Status': '[OK] Pass' if not aa_result['significant'] else '[FAIL] Fail'
     }
 ] + [
     {
@@ -486,7 +486,7 @@ comparison = pd.DataFrame([
         'Conversations': r['n_conversations'],
         'Lift': f"{r['lift']:.2%}",
         'P-value': f"{r['p_value']:.4f}",
-        'Status': '✅ Sig' if r['significant'] else '❌ NS'
+        'Status': '[OK] Sig' if r['significant'] else '[FAIL] NS'
     }
     for i, r in enumerate(check_results)
 ] + [{
@@ -495,7 +495,7 @@ comparison = pd.DataFrame([
     'Conversations': result['sample_size_control'] + result['sample_size_treatment'],
     'Lift': f"{result['lift']:.2%}",
     'P-value': f"{result['p_value']:.4f}",
-    'Status': '✅ Sig' if result['significant'] else '❌ NS'
+    'Status': '[OK] Sig' if result['significant'] else '[FAIL] NS'
 }])
 
 print("\n" + comparison.to_string(index=False))
@@ -503,11 +503,11 @@ print("\n" + comparison.to_string(index=False))
 print(f"""
 
 Key Learnings:
-  1. ✅ A/A test validated infrastructure before investing in full experiment
-  2. ✅ Used actual variance from A/A test for accurate sample size
-  3. ✅ Gradual rollout ({rollout_percent}%) minimized risk
-  4. ✅ Sequential monitoring provided continuous oversight
-  5. ✅ Complete audit trail from validation to decision
+  1. [OK] A/A test validated infrastructure before investing in full experiment
+  2. [OK] Used actual variance from A/A test for accurate sample size
+  3. [OK] Gradual rollout ({rollout_percent}%) minimized risk
+  4. [OK] Sequential monitoring provided continuous oversight
+  5. [OK] Complete audit trail from validation to decision
   
 Total Time Investment:
   - A/A test: 7 days (infrastructure validation)

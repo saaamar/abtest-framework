@@ -267,7 +267,7 @@ Where:
 * $p$ = baseline rate (e.g., current conversion rate)  
 * **MDE** = absolute minimum detectable effect (e.g., 10% relative lift on 3.2% → 0.0032 absolute)
 
-This is the formula implemented by functions like `calculate_sample_size(...)` in the framework.
+This is the formula implemented by the `SampleSizeCalculator` class in the framework.
 
 ### D) Clustered standard errors (when observations are grouped)
 
@@ -350,7 +350,7 @@ When interpreting required sample sizes and planned durations, you should also a
 * **Multiple testing** – if you look at many metrics or peek frequently, your effective false‑positive rate grows; use corrections or pre‑defined monitoring rules.
 * **Variance reduction** – methods like CUPED or stratification can reduce variance and therefore reduce required sample size without changing α or power.
 
-These considerations are general to A/B testing, regardless of the specific implementation. The `README.md` shows how this framework exposes them via configuration fields and helper functions such as `calculate_sample_size(...)`.
+These considerations are general to A/B testing, regardless of the specific implementation. The `README.md` shows how this framework exposes them via configuration fields and the `SampleSizeCalculator` class.
 
 ---
 

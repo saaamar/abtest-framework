@@ -140,7 +140,7 @@ All formulas, variance definitions, sample‑size equations, and clustered stand
 
 ## 3. 📊 Sample Size Determination: The Foundation
 
-This framework provides helpers such as `calculate_sample_size(...)` and `calculate_experiment_duration(...)` to turn your **statistical choices** into concrete **sample sizes and durations**.
+This framework provides the `SampleSizeCalculator` class to turn your **statistical choices** into concrete **sample sizes and durations**.
 
 At configuration time you typically provide:
 
@@ -187,55 +187,28 @@ traffic_allocation = {"control": 0.50, "treatment": 0.50}  # 50/50 split
 experiment_traffic_pct = sum(traffic_allocation.values())  # 1.0 = 100% of users
 
 # Step 4: Calculate required sample size per variant (control/treatment)
-sample_size_per_variant = calculate_sample_size(alpha, power, baseline_rate, mde)
-total_sample_size = sample_size_per_variant * len(traffic_allocation)
+from ab_framework import SampleSizeCalculator
 
-# Step 5: Estimate experiment duration
+calc = SampleSizeCalculator()
+result = calc.for_proportion(
+    baseline_rate=baseline_rate,
+    mde=meaningful_lift,
+    alpha=alpha,
+    power=power
+)
+
+total_sample_size = result['total_size']
+print(f"Required sample size: {total_sample_size:,}")
+print(f"  Control: {result['control_size']:,}")
+print(f"  Treatment: {result['treatment_size']:,}")
+
+# Step 5: Estimate experiment duration (manual calculation)
 daily_users = 10000  # Historical average daily user count
-daily_experiment_users = daily_users * experiment_traffic_pct  # Users in experiment per day
+daily_experiment_users = daily_users * experiment_traffic_pct
 buffer_factor = 1.2  # 20% buffer for traffic fluctuations
 
 duration_days = math.ceil((total_sample_size * buffer_factor) / daily_experiment_users)
-
-print(f"Required sample size: {total_sample_size:,}")
-print(f"Daily experiment users: {daily_experiment_users:,}")
 print(f"Estimated duration: {duration_days} days")
-```
-
-**Duration Calculation Helper (package‑oriented sketch):**
-```python
-def calculate_experiment_duration(required_sample_size, daily_traffic, 
-                                  experiment_traffic_pct, buffer_factor=1.2):
-    """Calculate required experiment duration.
-
-    Args:
-        required_sample_size: Total sample size needed across all variants.
-        daily_traffic: Average daily users/sessions.
-        experiment_traffic_pct: Fraction of total traffic in the experiment (0.0–1.0).
-        buffer_factor: Safety buffer for traffic fluctuations (default 1.2 = 20%).
-
-    Returns:
-        dict: Duration info including days, expected sample size, etc.
-    """
-    daily_experiment_users = daily_traffic * experiment_traffic_pct
-    duration_days = math.ceil((required_sample_size * buffer_factor) / daily_experiment_users)
-
-    return {
-        "duration_days": duration_days,
-        "daily_experiment_users": daily_experiment_users,
-        "required_sample_size": required_sample_size,
-        "buffer_factor": buffer_factor,
-        "expected_final_sample": duration_days * daily_experiment_users
-    }
-
-# Example calculations
-duration_info = calculate_experiment_duration(
-    required_sample_size=50000,
-    daily_traffic=10000,
-    experiment_traffic_pct=1.0,  # 100% of users in experiment
-    buffer_factor=1.2
-)
-# Result: ~6 days
 ```
 
 The **theory details** behind these calculations (effects of seasonality, external factors, multiple testing, and variance reduction) are covered in the theory reference. Here in the README we focus on **how to call** the helpers and wire them into your planning flow.
@@ -246,16 +219,28 @@ For more on planning theory, see:
 
 **Example Scenarios (framework usage):**
 ```python
+import math
+from ab_framework import SampleSizeCalculator
+
+calc = SampleSizeCalculator()
+
+# Get required sample size
+result = calc.for_proportion(baseline_rate=0.10, mde=0.05, power=0.80, alpha=0.05)
+required_sample_size = result['total_size']
+
 # Scenario 1: High traffic site, full allocation
-calculate_experiment_duration(required_sample_size=100000, daily_traffic=50000, experiment_traffic_pct=1.0)
+daily_experiment_users = 50000 * 1.0
+duration = math.ceil((required_sample_size * 1.2) / daily_experiment_users)
 # Result: ~3 days
 
 # Scenario 2: Conservative allocation (50% of users)
-calculate_experiment_duration(required_sample_size=100000, daily_traffic=50000, experiment_traffic_pct=0.5)
+daily_experiment_users = 50000 * 0.5
+duration = math.ceil((required_sample_size * 1.2) / daily_experiment_users)
 # Result: ~5 days
 
 # Scenario 3: Lower traffic site
-calculate_experiment_duration(required_sample_size=100000, daily_traffic=5000, experiment_traffic_pct=1.0)
+daily_experiment_users = 5000 * 1.0
+duration = math.ceil((required_sample_size * 1.2) / daily_experiment_users)
 # Result: ~24 days
 ```
 
@@ -264,12 +249,15 @@ calculate_experiment_duration(required_sample_size=100000, daily_traffic=5000, e
 
 ```python
 # A/A Test Configuration
-aa_duration = calculate_experiment_duration(
-    required_sample_size=10000,  # Smaller sample for validation
-    daily_traffic=10000,
-    experiment_traffic_pct=1.0,
-    buffer_factor=1.1
-)
+import math
+
+required_sample_size = 10000  # Smaller sample for validation
+daily_traffic = 10000
+experiment_traffic_pct = 1.0
+buffer_factor = 1.1
+
+daily_experiment_users = daily_traffic * experiment_traffic_pct
+aa_duration_days = math.ceil((required_sample_size * buffer_factor) / daily_experiment_users)
 
 aa_test = {
     "control": "variant_A",
@@ -279,7 +267,7 @@ aa_test = {
     "treatment": 0.50         # 50% get treatment (also control_model!)
     },
     # total_experiment_traffic = sum(traffic_allocation) = 1.0 (calculated automatically)
-    "duration_days": aa_duration["duration_days"]  # Calculated: typically 2-3 days
+    "duration_days": aa_duration_days  # Calculated: typically 2-3 days
 }
 ```
 
@@ -303,18 +291,20 @@ At a theory level, SRM checks are typically implemented via a **χ² goodness‑
 # A/B Test Configuration - Different Traffic Allocation Options
 
 # Calculate duration based on sample size and traffic
-ab_duration_full = calculate_experiment_duration(
-    required_sample_size=38415,  # From sample size calculation
-    daily_traffic=10000,
-    experiment_traffic_pct=1.0,  # 100% in experiment
-    buffer_factor=1.2
+import math
+
+required_sample_size = 38415  # From sample size calculation
+daily_traffic = 10000
+buffer_factor = 1.2
+
+# Full allocation
+ab_duration_full_days = math.ceil(
+    (required_sample_size * buffer_factor) / (daily_traffic * 1.0)
 )
 
-ab_duration_conservative = calculate_experiment_duration(
-    required_sample_size=38415,
-    daily_traffic=10000,
-    experiment_traffic_pct=0.5,  # 50% in experiment  
-    buffer_factor=1.2
+# Conservative allocation
+ab_duration_conservative_days = math.ceil(
+    (required_sample_size * buffer_factor) / (daily_traffic * 0.5)
 )
 
 # Option 1: 50/50 split of ALL traffic
@@ -326,7 +316,7 @@ ab_test_full = {
         "treatment": 0.50             # 50% get treatment
     },
     # total_experiment_traffic = sum(0.50 + 0.50) = 1.0 (100% of users)
-    "duration_days": ab_duration_full["duration_days"]  # Calculated duration
+    "duration_days": ab_duration_full_days  # Calculated duration
 }
 
 # Option 2: Conservative split - only 50% of users in experiment
@@ -339,15 +329,12 @@ ab_test_conservative = {
     },
     # total_experiment_traffic = sum(0.25 + 0.25) = 0.50 (50% of users)
     # remaining 50% automatically get normal production (not tracked by framework)
-    "duration_days": ab_duration_conservative["duration_days"]  # Calculated duration (2x longer)
+    "duration_days": ab_duration_conservative_days  # Calculated duration (2x longer)
 }
 
 # Option 3: Uneven split for high-risk changes
-ab_duration_uneven = calculate_experiment_duration(
-    required_sample_size=38415,
-    daily_traffic=10000,
-    experiment_traffic_pct=1.0,
-    buffer_factor=1.2
+ab_duration_uneven_days = math.ceil(
+    (required_sample_size * buffer_factor) / (daily_traffic * 1.0)
 )
 
 ab_test_uneven = {
@@ -358,7 +345,7 @@ ab_test_uneven = {
         "treatment": 0.10             # 10% get treatment
     },
     # total_experiment_traffic = sum(0.90 + 0.10) = 1.0 (100% of users)
-    "duration_days": ab_duration_uneven["duration_days"]  # Calculated duration
+    "duration_days": ab_duration_uneven_days  # Calculated duration
 }
 
 # Framework Validation Logic

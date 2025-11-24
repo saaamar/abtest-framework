@@ -350,15 +350,165 @@ When interpreting required sample sizes and planned durations, you should also a
 * **Multiple testing** – if you look at many metrics or peek frequently, your effective false‑positive rate grows; use corrections or pre‑defined monitoring rules.
 * **Variance reduction** – methods like CUPED or stratification can reduce variance and therefore reduce required sample size without changing α or power.
 
-These considerations are general to A/B testing, regardless of the specific implementation. The `README.md` shows how this framework exposes them via configuration fields and helper functions such as `calculate_sample_size(...)` and `calculate_experiment_duration(...)`.
+These considerations are general to A/B testing, regardless of the specific implementation. The `README.md` shows how this framework exposes them via configuration fields and helper functions such as `calculate_sample_size(...)`.
 
 ---
 
-## 5. Data Quality, SRM, and Sequential Monitoring
+## 5. A/A Testing: Infrastructure Validation
+
+Before running any A/B test with real treatment effects, best practice is to conduct an **A/A test**: both groups receive the *same* treatment (typically the current production experience), and you verify that the experimentation infrastructure produces valid results.
+
+### 5.1 Purpose of A/A testing
+
+An A/A test validates the **null hypothesis machinery** itself:
+
+> Under the null hypothesis of *no effect*, do we correctly observe no significant difference most of the time?
+
+This addresses several critical infrastructure questions:
+
+1. **Randomization**: Does the assignment mechanism produce balanced groups?
+2. **Metric collection**: Are metrics computed consistently across variants?
+3. **Implementation bugs**: Are there code paths that differ between variants even when both should be identical?
+4. **Variance estimation**: What is the actual baseline variance for sample size planning?
+
+### 5.2 Expected behavior in an A/A test
+
+In an A/A test, you expect:
+
+* **No significant difference** in the primary metric (p-value > α, typically > 0.05)
+* **Small observed lifts** due to random sampling noise (typically < 2–3%)
+* **No Sample Ratio Mismatch** (SRM check passes)
+* **Stable variance estimate** after sufficient data collection
+
+**Interpreting p-values in A/A tests:**
+
+Unlike A/B tests where p < 0.05 indicates success, in A/A tests:
+
+$$
+\begin{align*}
+p > 0.05 &\implies \text{PASS (expected — no difference detected)} \\
+p < 0.05 &\implies \text{FAIL (unexpected — infrastructure problem)}
+\end{align*}
+$$
+
+If you run an A/A test and observe p < 0.05, this is a **red flag** indicating:
+
+* Randomization bug (e.g., systematic assignment based on user characteristics)
+* Metric collection bias (e.g., one variant logs events differently)
+* Implementation error (e.g., code paths diverge even when treatments are identical)
+
+### 5.3 Duration and sample size for A/A tests
+
+The goal of an A/A test is twofold:
+
+1. **Validate infrastructure** (requires enough data to detect bugs)
+2. **Estimate variance** (requires stable variance estimate)
+
+**Recommended guidelines:**
+
+| Criterion | Recommendation |
+|-----------|----------------|
+| Minimum samples per variant | 300–500 units |
+| Minimum duration | 7 days (full week to capture day-of-week effects) |
+| Variance convergence | Continue until variance estimate stabilizes |
+
+**Why 7 days minimum?**
+
+Most products exhibit **weekly seasonality** (e.g., weekday vs. weekend behavior). Running for at least one full week ensures your variance estimate incorporates this natural variation.
+
+**Traffic-based guidelines:**
+
+For products with varying traffic levels:
+
+| Daily traffic | Recommended duration |
+|--------------|---------------------|
+| < 50 units/day | 10–14 days (need more time to reach 300+ per variant) |
+| 50–100 units/day | 7–10 days |
+| 100–200 units/day | 7 days |
+| 200+ units/day | 3–7 days (high volume allows faster validation) |
+
+### 5.4 Using A/A results for A/B planning
+
+The A/A test provides two critical inputs for your subsequent A/B test:
+
+1. **Baseline mean** ($\mu_0$): More accurate than historical estimates
+2. **Baseline standard deviation** ($\sigma_0$): Reflects actual variability in your system
+
+Use these values in sample size calculations:
+
+```
+For continuous metrics:
+n ≈ (Z_α/2 + Z_β)² × (2σ₀²) / (μ₀ × MDE)²
+
+Where:
+  μ₀ = control_mean from A/A test
+  σ₀ = std_pooled from A/A test
+  MDE = relative minimum detectable effect (business requirement)
+```
+
+This produces more accurate sample size estimates than using historical data or assumptions.
+
+### 5.5 False positive rate and A/A tests
+
+By design, with α = 0.05, you expect:
+
+$$
+P(\text{false positive in single A/A test}) = 0.05
+$$
+
+This means if you run 20 A/A tests, you expect about 1 to show p < 0.05 *by chance alone*. This is **not** a bug — it's how hypothesis testing works.
+
+However, if you observe:
+
+* **Multiple consecutive A/A failures** (e.g., 3+ in a row with p < 0.05), or
+* **Extreme p-values** (e.g., p < 0.001), or
+* **SRM violations** (sample ratio mismatch detected)
+
+Then you likely have a real infrastructure problem that must be fixed before proceeding to A/B testing.
+
+### 5.6 Common A/A test failure modes
+
+| Symptom | Likely cause | Action |
+|---------|-------------|--------|
+| p < 0.05, large effect (> 5%) | Randomization bug or metric collection bias | Investigate assignment logic and metric computation |
+| p < 0.05, small effect (< 3%) | Possibly chance (run another A/A) | Re-run; if persists, investigate |
+| SRM detected (χ² test fails) | Assignment bug, data pipeline issue | Check randomization and data collection |
+| Unstable variance across days | Seasonality or external events | Extend duration to capture full cycles |
+
+### 5.7 A/A testing in practice
+
+**Recommended workflow:**
+
+```
+Phase 0: A/A Test (7+ days)
+  ↓
+  Validate: p > 0.05, no SRM, stable variance
+  ↓
+  Extract: μ₀, σ₀ for sample size calculation
+  ↓
+Phase 1: Sample Size Planning
+  ↓
+  Use A/A parameters for accurate power analysis
+  ↓
+Phase 2: A/B Test
+  ↓
+  Run with validated infrastructure and accurate sample size
+```
+
+By investing in A/A testing upfront, you gain:
+
+* **Confidence** in infrastructure (no silent bugs)
+* **Accurate variance** for sample size (avoid under/overpowering)
+* **Baseline estimate** closer to reality than historical data
+* **Documentation** of system behavior for future experiments
+
+---
+
+## 6. Data Quality, SRM, and Sequential Monitoring
 
 This section collects the theory behind **data quality checks** and **sequential monitoring** that the framework expects users to understand, even though the concrete checks and configuration live in the package API.
 
-### 5.1 Data quality and Sample Ratio Mismatch (SRM)
+### 6.1 Data quality and Sample Ratio Mismatch (SRM)
 
 Even a perfectly specified hypothesis test is only as trustworthy as the **data** fed into it. A key failure mode in online experiments is **Sample Ratio Mismatch (SRM)**:
 
@@ -393,7 +543,7 @@ Under the null hypothesis of *no SRM* (i.e., routing behaves as designed), this 
 
 In the framework, the SRM test is conceptually part of a broader **data quality check** that also looks at minimum sample sizes, duration vs. plan, external events, and pipeline health.
 
-### 5.2 Sequential monitoring and peeking
+### 6.2 Sequential monitoring and peeking
 
 In practice, teams rarely wait strictly until the pre‑planned end of an experiment before looking at results. Every **unplanned peek** at a running p‑value, however, increases the chance of a **false positive** (Type I error) beyond the nominal α.
 
@@ -417,11 +567,11 @@ The key takeaway for users of this package is methodological:
 
 ---
 
-## 6. Metric Types and Multiple Metrics
+## 7. Metric Types and Multiple Metrics
 
 The framework is designed around a **single primary metric per experiment** for clean decision‑making, but in real analyses you often look at **multiple metrics** (primary, guardrail, diagnostics). This section captures the theory behind that choice.
 
-### 6.1 Metric types recap
+### 7.1 Metric types recap
 
 Broadly, we distinguish:
 
@@ -431,17 +581,71 @@ Broadly, we distinguish:
 
 From a planning standpoint, rate metrics rely on binomial/normal approximations, continuous metrics rely on variance estimates from historical data, and count metrics may use Poisson‑like models when appropriate. The cheat‑sheet in Section 3 summarizes the core formulas.
 
-### 6.2 Why a single primary metric?
+### 7.2 Why a single primary metric?
 
 If you **declare one primary metric** per experiment, you can:
 
-* Control the false‑positive rate **directly** at that metric’s α
-* Keep the **decision logic simple** (“ship if the primary metric passes, subject to guardrails”)
+* Control the false‑positive rate **directly** at that metric's α
+* Keep the **decision logic simple** ("ship if the primary metric passes, subject to guardrails")
 * Avoid inflating required sample size to satisfy power requirements across many outcomes
 
 Secondary and guardrail metrics are still analyzed, but they are interpreted with more caution and, if strictly tested, should be treated as a **family of tests**.
 
-### 6.3 Multiple testing math
+### 7.2.1 Metric role taxonomy
+
+In practice, experiments track multiple metrics with different purposes. We recommend organizing metrics into three clear roles:
+
+#### Primary metrics
+
+The **primary metric** is the single success criterion that must show statistically significant improvement for the experiment to be deemed successful.
+
+* **Statistical treatment**: Full power analysis, strict α control
+* **Decision weight**: Decisive — experiment "wins" only if primary improves
+* **Recommendation**: Exactly **one** primary metric per experiment
+
+**Why one primary?**
+
+1. **Power**: If you have two primaries and require *both* to improve, your effective power is $\text{power}_1 \times \text{power}_2$. For example, two metrics each with 80% power yield joint power of only 64%.
+2. **Type I error**: If you require *either* to improve and test each at $\alpha = 0.05$, your family-wise error rate is approximately $1 - (1-0.05)^2 \approx 0.0975$ — nearly 10%!
+3. **Simplicity**: "Ship if primary improves" is unambiguous. Multiple primaries create decision paralysis when metrics conflict.
+
+#### Guardrail metrics
+
+**Guardrail metrics** are safety checks: metrics that must *not* degrade significantly. They act as constraints on the decision, not as success criteria.
+
+* **Statistical treatment**: Tested for significant *worsening*; apply multiple‑testing correction
+* **Decision weight**: Veto power — even if primary wins, a violated guardrail blocks shipping
+* **Recommendation**: 2–5 guardrails (enough to protect key dimensions, not so many that shipping becomes impossible)
+
+**Examples**:
+
+* **E-commerce**: If you improve conversion (primary), ensure revenue per order (guardrail) doesn't drop
+* **Performance**: If you improve engagement (primary), ensure page load time (guardrail) doesn't increase
+* **Safety**: If you improve throughput (primary), ensure error rate (guardrail) doesn't rise
+
+**Decision logic**:
+
+$$
+\text{Ship} \iff \text{(primary improved significantly)} \land \text{(no guardrail degraded significantly)}
+$$
+
+#### Diagnostic metrics
+
+**Diagnostic metrics** are informational: they help you understand *why* the change worked (or didn't), but they do not block decisions.
+
+* **Statistical treatment**: Report point estimates and significance, but no correction needed
+* **Decision weight**: Zero — never blocks shipping
+* **Recommendation**: Use freely (5–10 or more) for learning and hypothesis generation
+
+**Examples**:
+
+* Funnel steps (e.g., "added to cart", "entered checkout")
+* Feature usage rates
+* Intermediate engagement signals
+
+**Purpose**: Build institutional knowledge, generate hypotheses for future experiments, and provide rich context for interpreting results.
+
+### 7.3 Multiple testing math
 
 When you test $k$ independent metrics each at level $\alpha$, the probability of **at least one** false positive is:
 
@@ -468,7 +672,7 @@ The practical implication for this framework is not that you must use any specif
 * Be explicit about which metrics are **primary vs. secondary vs. guardrail**, and
 * Be conservative when declaring wins on many metrics at once.
 
-### 6.4 Sample size implications
+### 7.4 Sample size implications
 
 If you insist that **all** of a set of $k$ metrics have, say, 80% power at some corrected α, the required **sample size** often needs to be larger than for a single‑metric design. A rough conceptual relationship is:
 
@@ -485,7 +689,7 @@ Because of this complexity, this framework’s initial design:
 
 ---
 
-## 7. Shadow Testing: Math and Risk Perspective
+## 8. Shadow Testing: Math and Risk Perspective
 
 Shadow testing, as described in the main `README.md`, runs a **new system or model** side‑by‑side with the existing production system on the **same requests**, but only the control’s outputs are shown to users.
 
@@ -517,7 +721,7 @@ which, under the null hypothesis of **no systematic difference** between shadow 
 
 Because each request serves as its **own control**, this test can be much more powerful than comparing two independent samples.
 
-### 7.2 McNemar’s test for paired binary outcomes
+### 8.2 McNemar’s test for paired binary outcomes
 
 For **binary** per‑request outcomes (e.g., “did this trigger a safety filter?”, “was this classification correct?”), you can summarize the joint outcomes in a 2×2 table:
 
@@ -534,7 +738,7 @@ $$
 
 which, under the null hypothesis that the **marginal probabilities** are the same (no net change between control and shadow), is approximately χ²‑distributed with 1 degree of freedom. This gives a p‑value for whether shadow changes the outcome rate.
 
-### 7.3 Risk framing
+### 8.3 Risk framing
 
 Shadow testing sits in the experimentation pipeline as a **risk‑mitigation layer**:
 
@@ -551,11 +755,11 @@ The **A/B testing** phase then takes over for user‑centric and business metric
 
 ---
 
-## 8. Decision Framework: Statistical vs Business Significance
+## 9. Decision Framework: Statistical vs Business Significance
 
 This section explains the theory underlying the Go/NoGo decision helpers exposed by the framework (e.g., `check_statistical_significance`, `check_business_significance`, `check_data_quality`, and `make_go_nogo_decision`).
 
-### 8.1 Statistical significance
+### 9.1 Statistical significance
 
 Given a test statistic (e.g., z‑statistic for proportions, t‑statistic for means) and a chosen significance level $\alpha$:
 
@@ -566,7 +770,7 @@ Importantly, $p < 0.05$ does **not** mean “there is a 95% chance the effect is
 
 The framework therefore treats statistical significance as a **necessary but not sufficient** condition for shipping.
 
-### 8.2 Business / practical significance
+### 9.2 Business / practical significance
 
 Business stakeholders care about **effect size**, not just whether it is non‑zero. We define:
 
@@ -580,7 +784,7 @@ Combining this with confidence intervals provides a richer view:
 * If the entire confidence interval lies above the MDE, the business case is very strong.
 * If the interval straddles the MDE, results are more borderline and often lead to “EXTEND” or “Ship with monitoring” recommendations.
 
-### 8.3 Data quality as a gate
+### 9.3 Data quality as a gate
 
 Even a statistically and practically compelling effect should **not** be shipped if the underlying data are unreliable. That is why the decision helpers place **data quality checks first**:
 
@@ -592,7 +796,7 @@ Even a statistically and practically compelling effect should **not** be shipped
 
 If any of these fail in a serious way, the framework recommends an **INCONCLUSIVE** outcome: fix issues and re‑run.
 
-### 8.4 Combined decision logic
+### 9.4 Combined decision logic
 
 Putting the three dimensions together gives a simple yet powerful **decision matrix** that the framework’s helpers encode:
 
@@ -605,7 +809,7 @@ This separation of concerns (statistics vs. business vs. data quality) is centra
 
 ---
 
-## 9. TODO / Open Theory Items
+## 10. TODO / Open Theory Items
 
 This section tracks topics that we plan to elaborate on in future iterations of the theory docs. They are intentionally left as placeholders for deeper explanations, examples, and references.
 

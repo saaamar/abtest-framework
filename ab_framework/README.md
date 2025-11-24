@@ -106,6 +106,221 @@ Options:
 - `'fdr'` - Benjamini-Hochberg, controls false discovery rate
 - `None` - No correction (not recommended for multiple metrics)
 
+## Working with Multiple Metrics
+
+When running experiments, you typically track several metrics with different purposes. Understanding these roles helps make clear, confident decisions.
+
+### Metric Roles
+
+#### Primary Metric (What You Want to Improve)
+- The **main success metric** for your experiment
+- Must show statistically significant improvement to ship
+- **Recommendation: Use exactly ONE primary metric per experiment**
+- Examples: `conversion_rate`, `revenue_per_user`, `engagement_score`
+
+**Why one primary?**
+- Clear decision criteria (ship if primary improves)
+- Maintains statistical power at designed level
+- Avoids confusion when metrics conflict
+- Simplifies communication with stakeholders
+
+#### Guardrail Metrics (What You Must Not Harm)
+- **Safety checks** - metrics that must not degrade significantly
+- If any guardrail violated → DO NOT SHIP (even if primary wins)
+- Examples: `error_rate`, `page_load_time`, `user_satisfaction`, `revenue_per_order`
+- **Recommendation: Use 2-5 guardrails**
+
+**Purpose:**
+- Prevent optimizing one metric at the expense of user experience
+- Catch unintended negative side effects
+- Protect business-critical metrics
+- Maintain long-term product health
+
+#### Diagnostic Metrics (For Understanding)
+- **Informational only** - help explain WHY the change worked
+- Do not block shipping decisions
+- Examples: `funnel_steps`, `feature_usage`, `session_depth`, `time_to_first_action`
+- **Use freely for learning and iteration**
+
+**Purpose:**
+- Understand mechanism of change
+- Generate hypotheses for future experiments
+- Identify opportunities for optimization
+- Build institutional knowledge
+
+### Example: Clear Metric Hierarchy
+
+```python
+from ab_framework import ABTest
+
+test = ABTest(name="checkout_redesign", data=df)
+
+# PRIMARY: What we're trying to improve
+@test.metric
+def conversion_rate(data):
+    """PRIMARY - Main success metric"""
+    return data.groupby('user_id')['purchased'].max()
+
+# GUARDRAILS: What we must not harm
+@test.metric
+def revenue_per_order(data):
+    """GUARDRAIL - Ensure we don't reduce order value"""
+    orders = data[data['purchased'] == 1]
+    return orders.groupby('user_id')['order_value'].sum()
+
+@test.metric
+def page_load_time(data):
+    """GUARDRAIL - Ensure performance doesn't degrade"""
+    return data.groupby('user_id')['load_time'].mean()
+
+@test.metric
+def user_satisfaction(data):
+    """GUARDRAIL - Protect user experience"""
+    return data.groupby('user_id')['satisfaction_score'].mean()
+
+# DIAGNOSTICS: For understanding behavior
+@test.metric
+def cart_abandonment(data):
+    """DIAGNOSTIC - Understand funnel behavior"""
+    added = data.groupby('user_id')['added_to_cart'].max()
+    purchased = data.groupby('user_id')['purchased'].max()
+    return ((added == 1) & (purchased == 0)).astype(int)
+
+@test.metric
+def checkout_page_views(data):
+    """DIAGNOSTIC - Track engagement"""
+    return data.groupby('user_id')['checkout_views'].sum()
+
+# Analyze all metrics with correction
+results = test.analyze(
+    metrics=[
+        'conversion_rate',      # Primary
+        'revenue_per_order',    # Guardrail
+        'page_load_time',       # Guardrail
+        'user_satisfaction',    # Guardrail
+        'cart_abandonment',     # Diagnostic
+        'checkout_page_views'   # Diagnostic
+    ],
+    correction='bonferroni'  # Apply correction for multiple testing
+)
+
+# Manual decision framework
+primary = results.metric_results['conversion_rate']
+guardrails = ['revenue_per_order', 'page_load_time', 'user_satisfaction']
+
+# Check primary improved
+primary_wins = primary['significant'] and primary['lift'] > 0
+
+# Check guardrails safe (no significant degradation)
+guardrails_safe = all([
+    not (results.metric_results[g]['significant'] and 
+         results.metric_results[g]['lift'] < 0)
+    for g in guardrails
+])
+
+# Decision
+if primary_wins and guardrails_safe:
+    print("✅ SHIP - Primary improved, all guardrails safe")
+    print(f"   Conversion: +{primary['lift']:.1%} (p={primary['p_value']:.4f})")
+    
+    # Review diagnostics for learning
+    cart_aband = results.metric_results['cart_abandonment']
+    print(f"   Cart abandonment: {cart_aband['lift']:+.1%} (diagnostic)")
+elif primary_wins and not guardrails_safe:
+    print("⚠️  DO NOT SHIP - Guardrails violated")
+    print(f"   Primary improved, but negative side effects detected")
+else:
+    print("❌ DO NOT SHIP - Primary did not improve significantly")
+```
+
+### Decision Framework
+
+**Conservative (Recommended):**
+```
+Ship if:
+  ✓ Primary metric shows significant improvement (p < 0.05)
+  AND
+  ✓ No guardrail shows significant degradation (p < 0.05, lift < 0)
+  
+Diagnostic metrics are reviewed but don't block decisions.
+```
+
+**Aggressive (Use with Caution):**
+```
+Ship if:
+  ✓ Primary metric shows significant improvement
+  
+Ignore guardrail warnings (only for low-risk experiments).
+```
+
+### Warning: Multiple Primary Metrics
+
+⚠️ **Using multiple primary metrics significantly increases:**
+- Required sample size (2-3x larger)
+- Experiment duration (2-3x longer)
+- Decision complexity (conflicting signals)
+- Risk of Type I errors (false positives)
+
+**Statistical Impact:**
+```python
+# Single primary metric
+n_single = 1,000 per variant
+power = 80%
+alpha = 0.05
+
+# Two primary metrics (both must improve)
+n_both = 2,500 per variant  # 2.5x larger!
+power = 80% × 80% = 64%     # Reduced power
+# OR need to increase sample size to maintain 80% joint power
+
+# Two primary metrics (either can improve)
+alpha_family = 1 - (1-0.05)² ≈ 0.0975  # Nearly 10% false positive rate!
+# Need Bonferroni: α = 0.05/2 = 0.025 per metric
+```
+
+**Only use multiple primaries when:**
+- You TRULY need to improve multiple metrics simultaneously
+- You're willing to collect 2-3x more data
+- You have clear logic for handling conflicts (both must improve? either can improve?)
+- Example: "Improve conversion AND reduce infrastructure cost"
+
+**Example with Multiple Primaries:**
+
+```python
+# ⚠️ Advanced: Multiple primaries (use sparingly)
+primary_metrics = ['conversion_rate', 'revenue_per_user']
+
+results = test.analyze(
+    metrics=primary_metrics + guardrails,
+    correction='bonferroni'  # Critical for multiple primaries!
+)
+
+# Decision: BOTH must show significant improvement
+both_improved = all([
+    results.metric_results[m]['significant'] and 
+    results.metric_results[m]['lift'] > 0
+    for m in primary_metrics
+])
+
+if both_improved:
+    print("✅ SHIP - Both primaries improved")
+else:
+    print("❌ DO NOT SHIP - Not all primaries improved")
+    for m in primary_metrics:
+        result = results.metric_results[m]
+        status = "✅" if result['significant'] else "❌"
+        print(f"   {status} {m}: {result['lift']:+.1%} (p={result['p_value']:.4f})")
+```
+
+### Best Practices Summary
+
+1. **One Primary Metric** - Clear success criterion, maintains statistical power
+2. **2-5 Guardrails** - Protect critical metrics without over-constraining
+3. **Multiple Diagnostics** - Learn freely without impacting decisions
+4. **Apply Corrections** - Use `correction='bonferroni'` or `'fdr'` for multiple metrics
+5. **Document Roles** - Make it clear which metrics are primary/guardrail/diagnostic
+6. **Pre-Register** - Decide metric roles BEFORE looking at results
+
 ### 4. SRM Checks
 
 Sample Ratio Mismatch checks run automatically:

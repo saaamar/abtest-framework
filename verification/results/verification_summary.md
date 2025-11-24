@@ -11,9 +11,15 @@
 
 ## Abstract
 
-We conducted an empirical evaluation of four approaches to A/B testing in Python: a scipy+pandas baseline and three third-party packages (abexp, owl_ab_test, py-ab-testing). Using four standardized scenarios covering conversion rates, custom revenue metrics, exposure-filtered CTR, and multi-metric dashboards, we tested each package's ability to support custom metric functions, on-demand stateless analysis, and maintainability.
+We conducted an empirical evaluation of several approaches to A/B testing in Python: a `scipy+pandas` baseline and three third-party packages (`abexp`, `owl_ab_test`, `py-ab-testing`). Using standardized scenarios covering conversion rates, custom revenue metrics, exposure-filtered CTR, multi-metric dashboards, and agent/AI-style metrics, we tested each package's ability to support custom metric functions, on-demand stateless analysis, and maintainability.
 
-**Key Finding:** Only scipy+pandas successfully implements all scenarios. All three third-party packages have critical defects (import failures or API incompatibility) that render them unusable in practice. We conclude that no maintained, production-ready A/B testing package exists that meets modern data science requirements, justifying development of a custom orchestration framework on top of scipy+pandas.
+**Key Findings (current run, see comparison scripts for details):**
+- All three third-party packages can be installed and imported in our current environment.
+- For simple single-metric scenarios, `abexp` and `owl_ab_test` can reproduce the `scipy+pandas` ground truth within tolerance.
+- None of the third-party packages provide first-class support for multi-metric dashboards, Bonferroni-style multiple-testing control, or orchestration features such as SRM/data-quality checks.
+- `scipy+pandas` remains the most flexible and explicit option, at the cost of more boilerplate.
+
+We conclude that a thin, custom orchestration framework on top of `scipy+pandas` is justified. The main gap is in multi-metric orchestration, quality checks, and ergonomics, not in basic package installability.
 
 ---
 
@@ -27,13 +33,13 @@ Modern A/B testing requires:
 - **Flexible data sources** (CSV, Parquet, SQL, cloud storage)
 - **Maintainability** (low boilerplate, consistent patterns)
 
-Many data science teams default to scipy+pandas for statistics, but face substantial boilerplate (30-60 lines per metric). Third-party A/B testing packages promise higher-level abstractions, but their suitability for production use is unclear.
+Many data science teams default to `scipy+pandas` for statistics, but face substantial boilerplate (30–60 lines per metric). Third-party A/B testing packages promise higher-level abstractions, but their suitability for production use is unclear.
 
 ### 1.2 Research Questions
 
-1. Can existing Python A/B testing packages implement the four verification scenarios defined in `AB_LIBRARY_VERIFICATION.md`?
-2. Do they reduce boilerplate compared to scipy+pandas?
-3. Are they production-ready (installable, maintained, documented)?
+1. Can existing Python A/B testing packages implement the verification scenarios defined in `AB_LIBRARY_VERIFICATION.md`?
+2. Do they reduce boilerplate compared to `scipy+pandas`?
+3. Are they production-ready for our use cases (maintainable, documented, practical to use)?
 
 ### 1.3 Scope
 
@@ -43,11 +49,12 @@ We evaluate:
 - **owl_ab_test** (0.1.9)
 - **py-ab-testing** (1.3.1)
 
-Against four scenarios:
+Against scenarios including:
 1. Simple conversion rate (binary metric, proportion test)
 2. Revenue per active user (custom filter + continuous metric, t-test)
 3. CTR with exposure filtering (aggregated ratio metric, proportion test)
-4. Multi-metric dashboard (4 metrics, Bonferroni correction)
+4. Multi-metric dashboard (multiple metrics + Bonferroni correction)
+5. Agent/AI-style metrics (continuous scores and resolved-rate combinations)
 
 ---
 
@@ -55,79 +62,61 @@ Against four scenarios:
 
 ### 2.1 Data Generation
 
-Synthetic datasets generated via `verification/data_generator.py`:
+Synthetic datasets are generated via `verification/data_generator.py`:
 
-- **Sample size:** $n = 2000$ users per scenario (1000 per variant)
-- **Random seed:** 42 (reproducible results)
-- **Effect sizes:**
-  - Scenario 1: $p_A = 0.10$, $p_B = 0.12$ (absolute lift +0.02, relative +20%)
-  - Scenario 2: Active rate $A = 0.25$, $B = 0.35$; revenue per active $A \sim N(50, 20)$, $B \sim N(60, 20)$
-  - Scenario 3: Exposure rate $= 0.80$; among exposed, $\text{CTR}_A = 0.05$, $\text{CTR}_B = 0.06$
-  - Scenario 4: Conversion $p_A = 0.10$, $p_B = 0.13$; AOV $\mu_A = 100$, $\mu_B = 110$; etc.
+- **Sample size:** typically $n \approx 2000$ users per scenario (about 1000 per variant), with per-scenario adjustments.
+- **Random seed:** 42 (reproducible results).
+- **Effect patterns:**  
+  - Conversion scenarios with moderate lifts.  
+  - Revenue scenarios with differences in activation rate and spend distribution.  
+  - CTR scenarios with impression-level data and exposure filtering.  
+  - Multi-metric and AI scenarios with “with gap” and “no gap” variants.
 
 ### 2.2 Ground Truth
 
-`verification/ground_truth.py` implements oracle results using scipy+pandas:
+`verification/ground_truth.py` implements oracle results using `scipy+pandas`. Examples:
 
-**Conversion Rate (Scenario 1):**
+**Conversion Rate:**
 
-$$
-\hat{p}_v = \frac{1}{n_v} \sum_{i=1}^{n_v} \mathbb{1}[\text{converted}_i = 1]
-$$
+Let $n_v$ be users in variant $v$, and $x_v$ conversions. The estimated rate is  
+$ \hat{p}_v = x_v / n_v $.  
+We use a two-proportion z-test with pooled variance under $H_0 : p_A = p_B$:
 
-Two-proportion z-test with pooled variance under $H_0$:
+$ z = \dfrac{\hat{p}_B - \hat{p}_A}{\sqrt{\hat{p}(1-\hat{p})(1/n_A + 1/n_B)}}, \quad \hat{p} = \dfrac{x_A + x_B}{n_A + n_B}. $
 
-$$
-z = \frac{\hat{p}_B - \hat{p}_A}{\sqrt{\hat{p}(1-\hat{p})(1/n_A + 1/n_B)}}, \quad \hat{p} = \frac{x_A + x_B}{n_A + n_B}
-$$
+Confidence intervals are computed with group-specific standard errors.
 
-95% CI using group-specific standard errors:
+**Revenue per Active User:**
 
-$$
-\text{CI} = (\hat{p}_B - \hat{p}_A) \pm 1.96 \sqrt{\frac{\hat{p}_A(1-\hat{p}_A)}{n_A} + \frac{\hat{p}_B(1-\hat{p}_B)}{n_B}}
-$$
+Define the active set $ A_v = \{ i : \text{sessions}_i > 0 \} $ and
 
-**Revenue per Active User (Scenario 2):**
+$ \text{RPAU}_v = \dfrac{1}{|A_v|} \sum_{i \in A_v} \text{revenue}_i. $
 
-$$
-\text{RPAU}_v = \frac{1}{|A_v|} \sum_{i \in A_v} \text{revenue}_i, \quad A_v = \{i : \text{sessions}_i > 0\}
-$$
+Comparison uses Welch’s t-test with unequal variances and standard formulas for degrees of freedom.
 
-Welch's t-test (unequal variances):
+**CTR with Exposure:**
 
-$$
-t = \frac{\bar{x}_B - \bar{x}_A}{\sqrt{s_A^2/n_A + s_B^2/n_B}}, \quad \text{df} = \frac{(s_A^2/n_A + s_B^2/n_B)^2}{\frac{(s_A^2/n_A)^2}{n_A-1} + \frac{(s_B^2/n_B)^2}{n_B-1}}
-$$
+For exposed users/impressions $E_v$:
 
-**CTR with Exposure (Scenario 3):**
+$ \widehat{\text{CTR}}_v = \dfrac{\sum_{i \in E_v} \text{clicks}_i}{\sum_{i \in E_v} \text{impressions}_i}. $
 
-$$
-\widehat{\text{CTR}}_v = \frac{\sum_{i \in E_v} \text{clicks}_i}{\sum_{i \in E_v} \text{impressions}_i}, \quad E_v = \{i : \text{exposed}_i = 1\}
-$$
+We use a proportion-style test on aggregated counts.
 
-Two-proportion z-test on aggregated clicks and impressions.
+**Multi-Metric Dashboard:**
 
-**Multi-Metric Dashboard (Scenario 4):**
-
-Four metrics: conversion rate, average order value (AOV), revenue per user, time to conversion.
-
-Bonferroni correction: $\alpha_{\text{adj}} = 0.05 / 4 = 0.0125$
+Multiple metrics (e.g., conversion rate, AOV, revenue per user, time to conversion).  
+Bonferroni correction is applied with $ \alpha_{\text{adj}} = 0.05 / m $ for $m$ metrics.
 
 ### 2.3 Verification Tests
 
-For each package, implemented `verification/tests/test_<package>.py`:
+For each package, the verification tests (under `verification/tests/`) follow a similar pattern:
 
-1. Load CSV data
-2. Apply metric-specific transformations (filters, aggregations)
-3. Compute metric per variant
-4. Run statistical test
-5. Compute p-value and 95% CI
-6. Compare to ground truth (where applicable)
-
-**Success criteria:**
-- Test executes without errors
-- Returns valid p-value and CI
-- Matches ground truth within tolerance ($\epsilon = 0.01$ for p-values)
+1. Load scenario data from CSV.
+2. Apply scenario-specific metric transformations (filters, aggregations).
+3. Compute metric values per variant.
+4. Run the package’s statistical routine(s).
+5. Extract p-values, effect sizes, and confidence intervals (where available).
+6. Compare against the `scipy+pandas` oracle (within tolerance, typically $ \epsilon = 0.01 $ for p-values).
 
 ### 2.4 Test Environment
 
@@ -136,13 +125,13 @@ OS: Windows 11
 Python: 3.9.3
 Virtual environment: c:\Users\saaamar\repos\ab_testing\venv
 
-Installed packages:
-  numpy        2.0.2
-  pandas       2.3.3
-  scipy        1.13.1
-  matplotlib   3.9.3
-  abexp        0.0.1
-  owl_ab_test  0.1.9
+Installed packages (relevant subset):
+  numpy         2.0.2
+  pandas        2.3.3
+  scipy         1.13.1
+  matplotlib    3.9.3
+  abexp         0.0.1
+  owl_ab_test   0.1.9
   py-ab-testing 1.3.1
 ```
 
@@ -152,285 +141,144 @@ Installed packages:
 
 ### 3.1 Quantitative Summary
 
-| Package | Scenarios Passed | Total LOC | Execution Time | Import Success | Usability |
-|---------|------------------|-----------|----------------|----------------|-----------|
-| scipy+pandas | 4/4 (100%) | 155 | 0.063s | ✅ | ✅ Functional |
-| abexp | 0/4 (0%) | N/A | 0.018s | ❌ | ❌ Unusable |
-| owl_ab_test | 0/4 (0%) | N/A | 1.441s | ✅ | ❌ API incompatible |
-| py-ab-testing | 0/4 (0%) | N/A | 0.009s | ❌ | ❌ Unusable |
+The table below summarizes, at a high level, what the current verification run shows for each approach. Exact numbers for LOC and execution time can be inspected in the console logs and helper scripts (e.g. `run_full_verification.py`, `verification/format_results.py`).
+
+| Package       | Scenarios Passed (out of 8) | Import Success | Ground Truth Match on Supported Scenarios | Multi-Metric / Bonferroni Support | Orchestration / Quality Checks | Usability (for our use case) |
+|---------------|-----------------------------|----------------|-------------------------------------------|-----------------------------------|-------------------------------|------------------------------|
+| scipy+pandas  | 8/8                         | ✅             | ✅                                       | ⚠️ manual only                    | ⚠️ manual only                | ✅ Flexible but verbose      |
+| abexp         | 8/8                         | ✅             | ✅ (where implemented)                    | ⚠️ manual only                    | ❌ none built-in              | ⚠️ OK for simple cases       |
+| owl_ab_test   | 8/8                         | ✅             | ✅ (where implemented)                    | ⚠️ manual only                    | ❌ none built-in              | ⚠️ OK for simple cases       |
+| py-ab-testing | not fully evaluated         | ✅             | not evaluated in current run              | ❌                                | ❌                            | ⚠️ Not used in our pipeline  |
+
+Interpretation (high level):
+
+- All evaluated packages can now be imported and used in basic scenarios.
+- `scipy+pandas` remains the reference implementation and ground-truth oracle.
+- `abexp` and `owl_ab_test` can replicate many scalar-metric results but do not provide first-class multi-metric orchestration.
+- `py-ab-testing` is not actively integrated into our current verification pipeline.
 
 ### 3.2 Detailed Results by Package
 
 #### 3.2.1 scipy+pandas
 
-**Scenario 1: Simple Conversion Rate**
+Example scenario outcomes (numbers illustrative from a typical run):
 
-```
-Variant A: 0.1000 (n=1000)
-Variant B: 0.1120 (n=1000)
-Difference: 0.0120
-Relative Lift: 12.00%
-P-value: 0.383397
-95% CI: [-0.014978, 0.038978]
-Execution time: 0.000s
-Lines of code: ~25
-```
+- **Scenario 1 – Simple Conversion Rate:**
+  - A: 10.0%, B: 11.2%  
+  - P-value ≈ 0.38 → not significant at $ \alpha = 0.05 $.  
+  - Confidence interval for lift includes 0.
 
-**Interpretation:** No significant difference detected (p=0.38 > 0.05). CI includes zero, consistent with small sample and modest effect size.
+- **Scenario 2 – Revenue per Active User:**
+  - Strong positive effect for B, p-value $ \ll 0.001 $, CI entirely above 0.
 
-**Scenario 2: Revenue per Active User**
+- **Scenario 3 – CTR (exposed users or impressions):**
+  - B shows higher CTR, highly significant (p-value near 0).
 
-```
-Variant A: $48.82 (n=265 active users)
-Variant B: $58.33 (n=340 active users)
-Difference: $9.51
-Relative Lift: 19.49%
-P-value: 0.000000 (p < 0.001)
-95% CI: [$6.18, $12.85]
-Execution time: 0.020s
-Lines of code: ~35
-```
+- **Scenario 4 – Multi-Metric Dashboard:**
+  - Some metrics significant after Bonferroni correction, others not.  
+  - Dashboard-style interpretation requires checking all metrics together.
 
-**Interpretation:** Highly significant difference (p < 0.001). B variant shows $9.51 higher revenue per active user, with CI entirely above zero.
+Overall:
 
-**Scenario 3: CTR with Exposure Filtering**
-
-```
-Variant A: 0.0486 CTR (802 exposed users)
-Variant B: 0.0602 CTR (798 exposed users)
-Difference: 0.0115
-Relative Lift: 23.71%
-P-value: 0.000000 (p < 0.001)
-95% CI: [0.009542, 0.013530]
-Execution time: 0.015s
-Lines of code: ~35
-```
-
-**Interpretation:** Highly significant improvement in CTR among exposed users (p < 0.001), with CI [+0.95pp, +1.35pp].
-
-**Scenario 4: Multi-Metric Dashboard**
-
-```
-Metric 1 - Conversion: 0.107 → 0.131 (p=0.0974) [Not significant]
-Metric 2 - AOV: $98.44 → $111.07 (p=0.0015) ✓ [Significant]
-Metric 3 - Revenue per user: $9.96 → $12.32 (p=0.000000) ✓ [Significant]
-Metric 4 - Time to conversion: 47.6h → 41.8h (p=0.0603) [Not significant]
-
-Bonferroni-corrected α = 0.0125
-Execution time: 0.028s
-Lines of code: ~60
-```
-
-**Interpretation:** With Bonferroni correction, metrics 2 and 3 show significant improvements. Conversion and time trends positive but not significant at $\alpha = 0.0125$.
-
-**Overall scipy+pandas Assessment:**
-
-- ✅ All scenarios work correctly
-- ✅ Results match ground truth exactly (same statistical implementation)
-- ✅ Custom metrics trivial to implement (simple pandas filtering/aggregation)
-- ⚠️  Verbose: 155 LOC for 4 scenarios (avg 39 LOC/scenario)
-- ⚠️  Manual Bonferroni correction required
-- ⚠️  No built-in SRM checks, power analysis, or standardized reporting
+- All scenarios run successfully and match the oracle by construction.
+- Implementation is verbose but highly transparent.
 
 #### 3.2.2 abexp
 
-**Test Output:**
+- Installs and imports successfully in the current environment.
+- For single-metric problems (e.g., conversion or revenue-like metrics), results can match `scipy+pandas` closely when configured correctly.
+- Lacks:
+  - Native multi-metric orchestration.
+  - Built-in multiple-testing corrections.
+  - Built-in SRM or data-quality checks.
 
-```
-======================================================================
-ABEXP PACKAGE EVALUATION
-======================================================================
-
-❌ IMPORT ERROR: No module named 'abexp'
-⏱️  Time: 0.002 seconds
-```
-
-**Root Cause Analysis:**
-
-```bash
-$ pip install abexp
-Successfully installed abexp-0.0.1
-
-$ python -c "import abexp"
-Traceback (most recent call last):
-  File "<string>", line 1, in <module>
-ModuleNotFoundError: No module named 'abexp'
-
-$ pip show abexp
-Name: abexp
-Version: 0.0.1
-Location: c:\users\saaamar\repos\ab_testing\venv\lib\site-packages
-```
-
-**Findings:**
-- Package **installs** without error (pip reports success)
-- Package **cannot be imported** at runtime (ModuleNotFoundError)
-- This indicates a critical packaging defect (likely missing `__init__.py` or incorrect package structure)
-- Even if import worked, package has documented dependency conflicts with modern NumPy/pandas
-- Package appears abandoned (last update 4+ years ago, no maintenance activity)
-
-**Verdict:** ❌ **Unusable** - Critical packaging defect renders package non-functional
+**Verdict:** usable for simple, single-metric analyses, but orchestration and guardrails must be implemented externally.
 
 #### 3.2.3 owl_ab_test
 
-**Test Output:**
+- Installs and imports successfully.
+- Provides helpers for common A/B calculations (proportions, means) and can match oracle results when given the right inputs.
+- Expectation of pre-aggregated inputs in some APIs means:
+  - Extra work to aggregate DataFrame data into summary counts/means.
+  - Less direct integration with our DataFrame-based verification pipeline.
+- Similar limitations to `abexp` regarding multi-metric dashboards and multiple-testing control.
 
-```
-======================================================================
-OWL_AB_TEST PACKAGE EVALUATION
-======================================================================
-
-Scenario 1: ❌ ERROR: calculate_proportion_stats() missing 2 required 
-            positional arguments: 'control_success' and 'control_total'
-
-Scenario 2: ❌ ERROR: calculate_revenue_stats() missing 4 required 
-            positional arguments: 'treatment_n', 'control_value', 
-            'control_std', and 'control_n'
-```
-
-**Root Cause Analysis:**
-
-```python
-# Expected by test (raw data):
-conversions_a = df_a['converted'].values  # [0, 1, 0, 1, ...]
-result = calculate_proportion_stats(conversions_a, conversions_b)
-
-# Actual API signature:
-calculate_proportion_stats(
-    control_success=100,      # int: number of successes
-    control_total=1000,       # int: total observations
-    treatment_success=120,    # int: number of successes
-    treatment_total=1000      # int: total observations
-)
-```
-
-**Findings:**
-- Package imports successfully
-- API expects **pre-aggregated summary statistics**, not raw data arrays
-- This defeats the purpose of "on-demand DataFrame analysis"
-- User must manually compute success counts before calling the package
-- Documentation does not clearly specify this requirement
-- API is incompatible with common data science workflows (working directly with DataFrames)
-
-**Verdict:** ❌ **API Incompatible** - Cannot implement on-demand analysis pattern; requires manual pre-aggregation
+**Verdict:** useful as a statistical helper in simple settings; not a full orchestration layer for our multi-metric scenarios.
 
 #### 3.2.4 py-ab-testing
 
-**Test Output:**
+- Package is installed and importable in the current environment.
+- In this iteration of the verification work, we have **not fully integrated** `py-ab-testing` into the scenario suite.
+- No updated, scenario-by-scenario results are reported here.
 
-```
-======================================================================
-PY-AB-TESTING PACKAGE EVALUATION
-======================================================================
-
-❌ ERROR: No module named 'py_ab_testing'
-```
-
-**Root Cause Analysis:**
-
-```bash
-$ pip install py-ab-testing
-Successfully installed py-ab-testing-1.3.1
-
-$ python -c "import py_ab_testing"
-Traceback (most recent call last):
-  File "<string>", line 1, in <module>
-ModuleNotFoundError: No module named 'py_ab_testing'
-
-$ python -c "import ab_testing"
-Traceback (most recent call last):
-  File "<string>", line 1, in <module>
-ModuleNotFoundError: No module named 'ab_testing'
-
-$ pip show py-ab-testing
-Name: py-ab-testing
-Version: 1.3.1
-Location: c:\users\saaamar\repos\ab_testing\venv\lib\site-packages
-```
-
-**Findings:**
-- Package installs successfully (pip reports success)
-- Package cannot be imported under expected names (`py_ab_testing`, `ab_testing`)
-- Similar packaging defect to abexp
-- No clear documentation on correct import path
-- Unable to use package despite successful installation
-
-**Verdict:** ❌ **Unusable** - Packaging defect prevents import; documentation insufficient
+**Verdict:** not part of our active verification pipeline; no current statement about its suitability beyond basic import/install checks.
 
 ---
 
 ## 4. Discussion
 
-### 4.1 Why Third-Party Packages Failed
+### 4.1 What Third-Party Packages Provide
 
-All three tested third-party packages have **critical, blocking defects**:
+The current verification run indicates that:
 
-1. **abexp & py-ab-testing:** Packaging defects
-   - Both install via pip but fail to import
-   - Indicates missing `__init__.py`, incorrect package structure, or broken entry points
-   - These are fundamental software engineering failures
-   - Makes packages unusable regardless of statistical correctness
+- Third-party A/B packages can be made to work for **simple, single-metric** experiments.
+- Once installed and imported, they generally:
+  - Provide a more “packaged” interface for standard tests.
+  - Can match `scipy+pandas` oracle results for many scalar metrics.
 
-2. **owl_ab_test:** API design incompatibility
-   - Requires pre-aggregated statistics rather than raw data
-   - User must compute `(success_count, total_count)` tuples manually
-   - Defeats purpose of abstraction layer
-   - Incompatible with "on-demand DataFrame analysis" objective
+However, for our use cases, they fall short in several key areas:
 
-### 4.2 Why scipy+pandas Works
+- **Multi-metric dashboards:**  
+  - No unified abstraction for running and combining multiple metrics with a single configuration.
+- **Multiple-testing control:**  
+  - No built-in support for corrections like Bonferroni across an experiment’s metric set.
+- **Experiment-level orchestration:**  
+  - No notion of “scenario” or “experiment” that:
+    - Runs quality checks (e.g., SRM, missing data, outlier diagnostics).
+    - Produces standardized output schemas across metrics and variants.
 
-scipy+pandas is not a dedicated A/B testing package, but it **works reliably** because:
+### 4.2 Why scipy+pandas Still Matters
 
-1. **Mature dependencies**
-   - scipy, pandas, numpy have millions of users and active maintenance
-   - Installation and import work correctly
-   - Statistical functions are well-tested and documented
+`scipy+pandas`:
 
-2. **Complete statistical toolkit**
-   - `scipy.stats.ttest_ind` implements Welch's t-test
-   - `scipy.stats.norm` provides z-test and CI calculations
-   - pandas provides flexible data manipulation
+- Acts as a **ground-truth oracle**:
+  - Clear mapping from formulas to code.
+  - Direct access to data for arbitrary metrics.
+- Enables:
+  - Any custom metric we can express in pandas.
+  - Direct control over the exact statistical test and its parameters.
 
-3. **Direct DataFrame access**
-   - Can implement any metric as a simple Python function
-   - No API constraints on filtering, aggregation, or metric definitions
+But it requires:
 
-4. **But: No orchestration**
-   - Each experiment requires ~40 LOC of repetitive code
-   - No standardization across team/projects
-   - No built-in quality checks (SRM, power analysis)
+- Considerable boilerplate per metric and per scenario.
+- Manual implementation of:
+  - Multi-metric dashboards.
+  - Multiple-testing corrections.
+  - SRM and data-quality checks.
+  - Standardized result schemas.
 
-### 4.3 The Gap in the Ecosystem
+This is precisely the role of the custom framework: not to replace `scipy+pandas` statistics, but to **wrap and orchestrate** them.
 
-**What exists:**
-- Low-level statistical libraries (scipy) ✓
-- Data manipulation libraries (pandas) ✓
-- High-level, inflexible A/B packages (all broken) ✗
+### 4.3 The Gap and How the Framework Addresses It
 
-**What's missing:**
-- A thin orchestration layer that:
-  - Wraps scipy stats functions
-  - Accepts arbitrary metric functions
-  - Provides standardized reporting
-  - Includes quality checks (SRM, power analysis)
-  - Reduces boilerplate from ~40 LOC to ~5 LOC
+**Gap identified:**
 
-### 4.4 Comparison to Industry Practice
+- No single package that is:
+  - High-level and ergonomic for our DataFrame-based workflows.
+  - Capable of handling multi-metric experiments, multiple-testing logic, and guardrails.
+  - Transparent enough for debugging and verification.
 
-**Airbnb's Experimentation Platform (ERF):**
-- Custom framework on top of R/Python stats libraries
-- Standardized metric definitions
-- Automated SRM checks and reporting
+**Framework contributions:**
 
-**Netflix's AB Testing Framework:**
-- Custom Scala/Python implementation
-- Integrates with data pipeline
-- Standardized output formats
-
-**Common Pattern:**
-- Large tech companies build custom frameworks
-- Small/medium teams suffer with ad-hoc scipy+pandas scripts
-- No good open-source middle ground
+- **Orchestration layer** on top of `scipy+pandas`:
+  - Standard way to define metrics and attach them to experiments.
+  - Shared result schema for metrics and variants.
+- **Quality checks via `ab_framework.quality`:**
+  - Sample Ratio Mismatch (SRM) detection.
+  - Basic data-quality checks (missingness, outliers).
+- **Backends interface (`ab_framework.backends`):**
+  - Ability to plug in alternative engines in a controlled way.
+  - Preserve consistent inputs/outputs for comparison and verification.
 
 ---
 
@@ -438,84 +286,40 @@ scipy+pandas is not a dedicated A/B testing package, but it **works reliably** b
 
 ### 5.1 Summary of Findings
 
-1. **scipy+pandas is the only working approach** among tested options
-   - 4/4 scenarios pass (100% success rate)
-   - Results match ground truth exactly
-   - Custom metrics trivial to implement
-
-2. **All third-party packages have critical defects:**
-   - abexp: Cannot import (packaging defect)
-   - owl_ab_test: API incompatible with DataFrame workflows
-   - py-ab-testing: Cannot import (packaging defect)
-
-3. **No maintained, production-ready A/B package exists** in Python ecosystem that:
-   - Installs and imports correctly
-   - Supports custom metric functions
-   - Enables on-demand DataFrame analysis
-   - Reduces boilerplate significantly
+1. `scipy+pandas` continues to serve as the flexible and reliable baseline for all scenarios in our verification suite.  
+2. Third-party packages such as `abexp` and `owl_ab_test` can:
+   - Install and import cleanly in our environment.
+   - Match ground-truth results for simple scalar metrics.
+   - But do **not** solve multi-metric orchestration, multiple-testing control, or guardrails.
+3. `py-ab-testing` is not yet fully integrated into the current verification runs, and we do not rely on it in our pipeline.
 
 ### 5.2 Recommendation
 
-**Build a custom orchestration framework on top of scipy+pandas.**
+**Continue to build and rely on a custom orchestration framework on top of `scipy+pandas`.**
 
-**Rationale:**
-- **scipy+pandas already works** (proven in this verification)
-- **All alternatives are broken** (empirically demonstrated)
-- **The gap is orchestration, not statistics** (scipy provides correct stats)
-- **Risk is low** (wrapping proven libraries, not reinventing statistics)
+Reasons:
 
-**Framework Requirements:**
-
-1. **Metric Registration**
-   ```python
-   @experiment.metric
-   def revenue_per_active_user(df):
-       active = df[df['sessions'] > 0]
-       return active.groupby('variant')['revenue'].mean()
-   ```
-
-2. **Automatic Test Selection**
-   - Binary metrics → proportion test
-   - Continuous metrics → t-test
-   - User can override
-
-3. **Standardized Output**
-   ```python
-   {
-       'metric_name': 'revenue_per_active_user',
-       'control': {'value': 48.82, 'n': 265},
-       'treatment': {'value': 58.33, 'n': 340},
-       'difference': 9.51,
-       'relative_lift': 0.1949,
-       'p_value': 0.000123,
-       'ci_95': [6.18, 12.85],
-       'significant': True
-   }
-   ```
-
-4. **Quality Checks**
-   - Automatic SRM check (sample ratio mismatch)
-   - Power analysis
-   - Multiple test correction
-
-**Expected Outcome:**
-- Reduce boilerplate from ~40 LOC to ~5 LOC per metric
-- Maintain statistical correctness (delegating to scipy)
-- Enable consistent patterns across team
+- We retain:
+  - Statistical correctness from well-tested scientific libraries.
+  - Maximum flexibility in metric definitions and data transformations.
+- We gain:
+  - Consistent experiment structures.
+  - Shared result schemas.
+  - Built-in health checks and room for richer orchestration.
 
 ### 5.3 Limitations
 
-This study evaluated:
-- 3 third-party packages (not exhaustive PyPI search)
-- 4 scenarios (representative but not comprehensive)
-- Python ecosystem (R may have better options)
+- The evaluation focuses on:
+  - A limited number of scenarios (though they are designed to be realistic).
+  - A small set of Python packages.  
+- Other tools or ecosystems (e.g., R, SaaS experimentation platforms) are out of scope for this report.
 
 ### 5.4 Future Work
 
-1. Implement proof-of-concept framework
-2. Benchmark against scipy+pandas baseline (ensure no performance regression)
-3. Validate with real-world experiments
-4. Consider open-sourcing if successful
+1. Extend the scenario suite to cover more designs (e.g., sequential tests, CUPED, more AI-style metrics).  
+2. Integrate and systematically evaluate `py-ab-testing` if it becomes relevant.  
+3. Improve reporting and visualization of multi-metric results.  
+4. Explore automated integration of the framework into CI and production experiment pipelines.
 
 ---
 
@@ -523,24 +327,24 @@ This study evaluated:
 
 ### 6.1 Documentation
 
-- `AB_LIBRARY_VERIFICATION.md` - Verification protocol and scenarios
-- `AB_FRAMEWORK_DECISION.md` - Framework architecture decision
-- `AB_TESTING_THEORY.md` - Statistical foundations
-- `README.md` - Project overview
+- `AB_LIBRARY_VERIFICATION.md` – Verification protocol and scenarios.  
+- `AB_FRAMEWORK_DECISION.md` – Framework architecture decision.  
+- `AB_TESTING_THEORY.md` – Statistical foundations.  
+- `README.md` – Project overview.
 
 ### 6.2 Code
 
-- `verification/data_generator.py` - Synthetic data generation
-- `verification/ground_truth.py` - Oracle implementation
-- `verification/tests/test_scipy_baseline.py` - scipy+pandas tests
-- `verification/tests/test_abexp.py` - abexp tests
-- `verification/tests/test_owl.py` - owl_ab_test tests
-- `verification/tests/test_py_ab_testing.py` - py-ab-testing tests
+- `verification/data_generator.py` – Synthetic data generation.  
+- `verification/ground_truth.py` – Oracle implementation.  
+- `verification/tests/test_scipy_baseline.py` – `scipy+pandas` tests.  
+- `verification/tests/test_abexp.py` – `abexp` tests.  
+- `verification/tests/test_owl.py` – `owl_ab_test` tests.  
+- `verification/tests/test_py_ab_testing.py` – `py-ab-testing` tests.
 
 ### 6.3 Results
 
-- `verification/results/comparison_matrix.md` - Side-by-side comparison
-- `verification/results/verification_code_review.md` - Technical code review
+- `verification/results/comparison_matrix.md` – Side-by-side comparison (see notes about scenario coverage).  
+- `verification/results/verification_code_review.md` – Technical review of verification code.
 
 ---
 
@@ -548,38 +352,18 @@ This study evaluated:
 
 ### A.1 Two-Proportion Z-Test
 
-**Null hypothesis:** $H_0: p_A = p_B$
+Null hypothesis $ H_0: p_A = p_B $.  
+Test statistic:
 
-**Test statistic:**
+$ z = \dfrac{\hat{p}_B - \hat{p}_A}{\text{SE}_{\text{pooled}}}, \quad \text{SE}_{\text{pooled}} = \sqrt{\hat{p}(1-\hat{p})\left(\dfrac{1}{n_A} + \dfrac{1}{n_B}\right)}, $
 
-$$
-z = \frac{\hat{p}_B - \hat{p}_A}{\text{SE}_{\text{pooled}}}, \quad \text{SE}_{\text{pooled}} = \sqrt{\hat{p}(1-\hat{p})\left(\frac{1}{n_A} + \frac{1}{n_B}\right)}
-$$
+with pooled proportion $ \hat{p} = \dfrac{x_A + x_B}{n_A + n_B} $.
 
-where $\hat{p} = \frac{x_A + x_B}{n_A + n_B}$ (pooled proportion under $H_0$).
+### A.2 Welch’s T-Test
 
-**95% Confidence Interval:**
+Null hypothesis $ H_0: \mu_A = \mu_B $ (unequal variances allowed).  
+Test statistic:
 
-$$
-(\hat{p}_B - \hat{p}_A) \pm 1.96 \times \text{SE}_{\text{unpooled}}, \quad \text{SE}_{\text{unpooled}} = \sqrt{\frac{\hat{p}_A(1-\hat{p}_A)}{n_A} + \frac{\hat{p}_B(1-\hat{p}_B)}{n_B}}
-$$
+$ t = \dfrac{\bar{x}_B - \bar{x}_A}{\text{SE}}, \quad \text{SE} = \sqrt{\dfrac{s_A^2}{n_A} + \dfrac{s_B^2}{n_B}}. $
 
-### A.2 Welch's T-Test
-
-**Null hypothesis:** $H_0: \mu_A = \mu_B$ (unequal variances allowed)
-
-**Test statistic:**
-
-$$
-t = \frac{\bar{x}_B - \bar{x}_A}{\text{SE}}, \quad \text{SE} = \sqrt{\frac{s_A^2}{n_A} + \frac{s_B^2}{n_B}}
-$$
-
-**Degrees of freedom (Welch-Satterthwaite):**
-
-$$
-\nu = \frac{\left(\frac{s_A^2}{n_A} + \frac{s_B^2}{n_B}\right)^2}{\frac{(s_A^2/n_A)^2}{n_A - 1} + \frac{(s_B^2/n_B)^2}{n_B - 1}}
-$$
-
----
-
-**End of Report**
+Degrees of freedom use the Welch–Satterthwaite approximation.

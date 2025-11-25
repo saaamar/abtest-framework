@@ -24,7 +24,7 @@ def test_scenario1_owl():
         from owl_ab_test import calculate_proportion_stats
         
         # Load impression-level data
-        df = pd.read_csv("../data/scenario1_conversion.csv")
+        df = pd.read_csv("verification/data/scenario1_conversion.csv")
         
         print(f"\nData: {len(df)} impressions from {df['user_id'].nunique()} users")
         
@@ -116,7 +116,7 @@ def test_scenario2_owl():
         from owl_ab_test import calculate_revenue_stats
         
         # Load session-level data
-        df = pd.read_csv("../data/scenario2_revenue.csv")
+        df = pd.read_csv("verification/data/scenario2_revenue.csv")
         
         print(f"\nData: {len(df)} sessions from {df['user_id'].nunique()} active users")
         
@@ -206,7 +206,7 @@ def test_scenario3_owl():
         from owl_ab_test import calculate_proportion_stats
         
         # Load impression-level data
-        df = pd.read_csv("../data/scenario3_ctr.csv")
+        df = pd.read_csv("verification/data/scenario3_ctr.csv")
         
         print(f"\nData: {len(df)} impressions from {df['user_id'].nunique()} users")
         
@@ -289,7 +289,7 @@ def test_scenario4_owl():
         from owl_ab_test import calculate_revenue_stats
         
         # Load session-level data
-        df = pd.read_csv("../data/scenario4_multi.csv")
+        df = pd.read_csv("verification/data/scenario4_multi.csv")
         
         print(f"\nData: {len(df)} sessions from {df['user_id'].nunique()} users")
         
@@ -351,7 +351,7 @@ def test_scenario5_owl():
     try:
         from owl_ab_test import calculate_proportion_stats
         
-        df = pd.read_csv("../data/scenario5_resolved_with_gap.csv")
+        df = pd.read_csv("verification/data/scenario5_resolved_with_gap.csv")
         print(f"\nData: {len(df)} sessions")
         
         df_a = df[df['variant'] == 'A']
@@ -410,7 +410,7 @@ def test_scenario6_owl():
     try:
         from owl_ab_test import calculate_proportion_stats
         
-        df = pd.read_csv("../data/scenario6_resolved_no_gap.csv")
+        df = pd.read_csv("verification/data/scenario6_resolved_no_gap.csv")
         print(f"\nData: {len(df)} sessions")
         
         df_a = df[df['variant'] == 'A']
@@ -469,7 +469,7 @@ def test_scenario7_owl():
     try:
         from owl_ab_test import calculate_revenue_stats
         
-        df = pd.read_csv("../data/scenario7_ai_metric_with_gap.csv")
+        df = pd.read_csv("verification/data/scenario7_ai_metric_with_gap.csv")
         print(f"\nData: {len(df)} sessions")
         
         df_a = df[df['variant'] == 'A']
@@ -532,7 +532,7 @@ def test_scenario8_owl():
     try:
         from owl_ab_test import calculate_revenue_stats
         
-        df = pd.read_csv("../data/scenario8_ai_metric_no_gap.csv")
+        df = pd.read_csv("verification/data/scenario8_ai_metric_no_gap.csv")
         print(f"\nData: {len(df)} sessions")
         
         df_a = df[df['variant'] == 'A']

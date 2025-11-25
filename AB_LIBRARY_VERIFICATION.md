@@ -138,6 +138,98 @@ def ctr_exposed_users(df):
 
 ---
 
+### Scenario 5: Agent Bot - Resolved Rate (WITH Gap)
+**Description**: Session-level A/B test for agent bot testing resolved rate. This scenario has a true effect (significant gap between variants).
+
+**Data Schema**:
+```
+session_id | variant | is_resolved | ai_metric | timestamp
+-----------|---------|-------------|-----------|----------
+s001       | A       | 1           | 3.2       | 2024-01-01
+s002       | B       | 1           | 3.5       | 2024-01-01
+...
+```
+
+**Metric**:
+```python
+def resolved_rate(df):
+    return df['is_resolved'].mean()
+```
+
+**Expected Output**:
+- Resolved rate for A and B
+- Proportion test results (should be significant)
+- P-value < 0.05 (true effect)
+- Confidence intervals
+
+**Purpose**: Tests handling of session-level binary metrics and detection of real effects.
+
+---
+
+### Scenario 6: Agent Bot - Resolved Rate (NO Gap)
+**Description**: Session-level A/B test for agent bot resolved rate. This scenario has NO true effect (null hypothesis is true).
+
+**Data Schema**: Same as Scenario 5
+
+**Metric**: Same as Scenario 5
+
+**Expected Output**:
+- Resolved rate for A and B (very similar)
+- Proportion test results (should be non-significant)
+- P-value > 0.05 (null result)
+- Confidence intervals containing zero
+
+**Purpose**: Tests that packages correctly identify when there is NO significant difference (avoiding false positives).
+
+---
+
+### Scenario 7: Agent Bot - AI Quality Metric (WITH Gap)
+**Description**: Session-level continuous metric (AI quality score 0-5). This scenario has a true effect.
+
+**Data Schema**: Same as Scenario 5
+
+**Metric**:
+```python
+def ai_quality_metric(df):
+    return df['ai_metric'].mean()
+```
+
+**Expected Output**:
+- Mean AI quality score for A and B
+- T-test results (should be significant)
+- P-value < 0.05 (true effect)
+- Effect size and confidence intervals
+
+**Purpose**: Tests handling of session-level continuous metrics and detection of real effects.
+
+---
+
+### Scenario 8: Agent Bot - AI Quality Metric (NO Gap)
+**Description**: Session-level continuous metric (AI quality score 0-5). This scenario has NO true effect.
+
+**Data Schema**: Same as Scenario 5
+
+**Metric**: Same as Scenario 7
+
+**Expected Output**:
+- Mean AI quality score for A and B (very similar)
+- T-test results (should be non-significant)
+- P-value > 0.05 (null result)
+- Confidence intervals containing zero
+
+**Purpose**: Tests that packages correctly identify when there is NO significant difference for continuous metrics (avoiding false positives).
+
+---
+
+**Note on Scenarios 5-8:**
+These scenarios are critical for validating that packages:
+1. Handle **session-level** data (not just user-level)
+2. Test both **binary** (resolved rate) and **continuous** (AI metric) outcomes
+3. Correctly identify **both significant AND null results** (avoiding false positives)
+4. Work with **agent bot / AI-specific metrics** that are increasingly common
+
+---
+
 ## 4. 🔬 Testing Protocol
 
 For each package and each scenario:
@@ -199,9 +291,14 @@ ab_testing/
 │   │   ├── scenario1_conversion.csv
 │   │   ├── scenario2_revenue.csv
 │   │   ├── scenario3_ctr.csv
-│   │   └── scenario4_multi.csv
+│   │   ├── scenario4_multi.csv
+│   │   ├── scenario5_resolved_with_gap.csv
+│   │   ├── scenario6_resolved_no_gap.csv
+│   │   ├── scenario7_ai_metric_with_gap.csv
+│   │   └── scenario8_ai_metric_no_gap.csv
 │   ├── data_generator.py        # Synthetic data generation
 │   ├── ground_truth.py          # Known correct results
+│   ├── SCENARIOS_EXPLAINED.md   # Human-readable scenario descriptions
 │   ├── tests/
 │   │   ├── test_abexp.py
 │   │   ├── test_owl.py
@@ -247,10 +344,10 @@ ab_testing/
 
 ## 9. 🎯 Next Steps
 
-1. **Create data generation scripts** for all 4 scenarios
+1. **Create data generation scripts** for all 8 scenarios
 2. **Generate synthetic datasets** with known effect sizes
 3. **Calculate ground truth** using scipy directly
-4. **Test each package** systematically
+4. **Test each package** systematically across all scenarios
 5. **Document findings** in comparison matrix
 6. **Make final recommendation**: Use existing, wrap, or build
 
@@ -287,10 +384,12 @@ After verification, we will create `AB_FRAMEWORK_DECISION.md` with:
 ### ✅ Completed Tests
 
 **1. scipy + pandas Baseline (Score: 6/10)**
-- ✅ All 4 scenarios implemented successfully
+- ✅ All 8 scenarios implemented successfully
 - ✅ Matches ground truth perfectly
 - ✅ Custom metrics work with simple pandas code
-- ⚠️ Requires ~155 lines of boilerplate code
+- ✅ Handles both user-level and session-level data
+- ✅ Correctly identifies both significant and null results
+- ⚠️ Requires ~260 lines of boilerplate code
 - ⚠️ Manual handling of power analysis, SRM, multiple testing
 - **Verdict:** Works but unmaintainable at scale
 

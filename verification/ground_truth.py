@@ -116,7 +116,7 @@ def calculate_ttest(
         'n_b': n_b
     }
 
-def scenario1_ground_truth(file_path: str = "data/scenario1_conversion.csv") -> Dict[str, Any]:
+def scenario1_ground_truth(file_path: str = "verification/data/scenario1_conversion.csv") -> Dict[str, Any]:
     """
     Ground truth for Scenario 1: Simple Conversion Rate Test
     
@@ -142,7 +142,7 @@ def scenario1_ground_truth(file_path: str = "data/scenario1_conversion.csv") -> 
     
     return result
 
-def scenario2_ground_truth(file_path: str = "data/scenario2_revenue.csv") -> Dict[str, Any]:
+def scenario2_ground_truth(file_path: str = "verification/data/scenario2_revenue.csv") -> Dict[str, Any]:
     """
     Ground truth for Scenario 2: Revenue per Active User
     
@@ -169,7 +169,7 @@ def scenario2_ground_truth(file_path: str = "data/scenario2_revenue.csv") -> Dic
     
     return result
 
-def scenario3_ground_truth(file_path: str = "data/scenario3_ctr.csv") -> Dict[str, Any]:
+def scenario3_ground_truth(file_path: str = "verification/data/scenario3_ctr.csv") -> Dict[str, Any]:
     """
     Ground truth for Scenario 3: CTR (Click-Through Rate)
     
@@ -195,7 +195,7 @@ def scenario3_ground_truth(file_path: str = "data/scenario3_ctr.csv") -> Dict[st
     
     return result
 
-def scenario4_ground_truth(file_path: str = "data/scenario4_multi.csv") -> Dict[str, Any]:
+def scenario4_ground_truth(file_path: str = "verification/data/scenario4_multi.csv") -> Dict[str, Any]:
     """
     Ground truth for Scenario 4: Multi-Metric Dashboard
     
@@ -288,7 +288,7 @@ def print_result(result: Dict[str, Any], indent: int = 0, metric_name: str = Non
             )
             print(conclusion)
 
-def scenario5_ground_truth(file_path: str = "data/scenario5_resolved_with_gap.csv") -> Dict[str, Any]:
+def scenario5_ground_truth(file_path: str = "verification/data/scenario5_resolved_with_gap.csv") -> Dict[str, Any]:
     """
     Ground truth for Scenario 5: Agent Bot - Resolved Rate WITH gap
     
@@ -312,7 +312,7 @@ def scenario5_ground_truth(file_path: str = "data/scenario5_resolved_with_gap.cs
     
     return result
 
-def scenario6_ground_truth(file_path: str = "data/scenario6_resolved_no_gap.csv") -> Dict[str, Any]:
+def scenario6_ground_truth(file_path: str = "verification/data/scenario6_resolved_no_gap.csv") -> Dict[str, Any]:
     """
     Ground truth for Scenario 6: Agent Bot - Resolved Rate NO gap
     
@@ -335,7 +335,7 @@ def scenario6_ground_truth(file_path: str = "data/scenario6_resolved_no_gap.csv"
     
     return result
 
-def scenario7_ground_truth(file_path: str = "data/scenario7_ai_metric_with_gap.csv") -> Dict[str, Any]:
+def scenario7_ground_truth(file_path: str = "verification/data/scenario7_ai_metric_with_gap.csv") -> Dict[str, Any]:
     """
     Ground truth for Scenario 7: Agent Bot - AI Quality Metric WITH gap
     
@@ -356,7 +356,7 @@ def scenario7_ground_truth(file_path: str = "data/scenario7_ai_metric_with_gap.c
     
     return result
 
-def scenario8_ground_truth(file_path: str = "data/scenario8_ai_metric_no_gap.csv") -> Dict[str, Any]:
+def scenario8_ground_truth(file_path: str = "verification/data/scenario8_ai_metric_no_gap.csv") -> Dict[str, Any]:
     """
     Ground truth for Scenario 8: Agent Bot - AI Quality Metric NO gap
     

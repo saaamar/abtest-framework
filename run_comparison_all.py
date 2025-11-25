@@ -22,8 +22,8 @@ from test_scipy_baseline import (
     test_scenario7_scipy_baseline, test_scenario8_scipy_baseline
 )
 
-# Change to verification directory so file paths work
-os.chdir(verification_dir)
+# Stay in root directory so paths like verification/data/ work correctly
+# (test files now use full paths from root)
 
 print("="*70)
 print("COMPLETE PACKAGE COMPARISON - ALL 8 SCENARIOS")
@@ -36,56 +36,56 @@ scenarios = [
         'name': 'Conversion Rate (Impression-Level)',
         'gt_func': scenario1_ground_truth,
         'scipy_func': test_scenario1_scipy_baseline,
-        'data_file': 'data/scenario1_conversion.csv'
+        'data_file': 'verification/data/scenario1_conversion.csv'
     },
     {
         'num': 2,
         'name': 'Revenue per Active User (Session-Level)',
         'gt_func': scenario2_ground_truth,
         'scipy_func': test_scenario2_scipy_baseline,
-        'data_file': 'data/scenario2_revenue.csv'
+        'data_file': 'verification/data/scenario2_revenue.csv'
     },
     {
         'num': 3,
         'name': 'CTR (Impression-Level)',
         'gt_func': scenario3_ground_truth,
         'scipy_func': test_scenario3_scipy_baseline,
-        'data_file': 'data/scenario3_ctr.csv'
+        'data_file': 'verification/data/scenario3_ctr.csv'
     },
     {
         'num': 4,
         'name': 'Multi-Metric Dashboard (Session-Level)',
         'gt_func': scenario4_ground_truth,
         'scipy_func': test_scenario4_scipy_baseline,
-        'data_file': 'data/scenario4_multi.csv'
+        'data_file': 'verification/data/scenario4_multi.csv'
     },
     {
         'num': 5,
         'name': 'Agent Bot - Resolved Rate (WITH gap)',
         'gt_func': scenario5_ground_truth,
         'scipy_func': test_scenario5_scipy_baseline,
-        'data_file': 'data/scenario5_resolved_with_gap.csv'
+        'data_file': 'verification/data/scenario5_resolved_with_gap.csv'
     },
     {
         'num': 6,
         'name': 'Agent Bot - Resolved Rate (NO gap)',
         'gt_func': scenario6_ground_truth,
         'scipy_func': test_scenario6_scipy_baseline,
-        'data_file': 'data/scenario6_resolved_no_gap.csv'
+        'data_file': 'verification/data/scenario6_resolved_no_gap.csv'
     },
     {
         'num': 7,
         'name': 'Agent Bot - AI Quality Metric (WITH gap)',
         'gt_func': scenario7_ground_truth,
         'scipy_func': test_scenario7_scipy_baseline,
-        'data_file': 'data/scenario7_ai_metric_with_gap.csv'
+        'data_file': 'verification/data/scenario7_ai_metric_with_gap.csv'
     },
     {
         'num': 8,
         'name': 'Agent Bot - AI Quality Metric (NO gap)',
         'gt_func': scenario8_ground_truth,
         'scipy_func': test_scenario8_scipy_baseline,
-        'data_file': 'data/scenario8_ai_metric_no_gap.csv'
+        'data_file': 'verification/data/scenario8_ai_metric_no_gap.csv'
     }
 ]
 

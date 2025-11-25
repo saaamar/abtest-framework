@@ -27,7 +27,7 @@ def test_scenario1_abexp():
     
     try:
         # Load impression-level data
-        df = pd.read_csv("../data/scenario1_conversion.csv")
+        df = pd.read_csv("verification/data/scenario1_conversion.csv")
         
         print(f"\nData: {len(df)} impressions from {df['user_id'].nunique()} users")
         
@@ -100,7 +100,7 @@ def test_scenario2_abexp():
     
     try:
         # Load session-level data
-        df = pd.read_csv("../data/scenario2_revenue.csv")
+        df = pd.read_csv("verification/data/scenario2_revenue.csv")
         
         print(f"\nData: {len(df)} sessions from {df['user_id'].nunique()} active users")
         
@@ -180,7 +180,7 @@ def test_scenario3_abexp():
     
     try:
         # Load impression-level data
-        df = pd.read_csv("../data/scenario3_ctr.csv")
+        df = pd.read_csv("verification/data/scenario3_ctr.csv")
         
         print(f"\nData: {len(df)} impressions from {df['user_id'].nunique()} users")
         print(f"Unit of randomization: User (variant assigned at user level)")
@@ -254,7 +254,7 @@ def test_scenario4_abexp():
     
     try:
         # Load session-level data
-        df = pd.read_csv("../data/scenario4_multi.csv")
+        df = pd.read_csv("verification/data/scenario4_multi.csv")
         
         print(f"\nData: {len(df)} sessions from {df['user_id'].nunique()} users")
         
@@ -317,7 +317,7 @@ def test_scenario5_abexp():
     start_time = time.time()
     
     try:
-        df = pd.read_csv("../data/scenario5_resolved_with_gap.csv")
+        df = pd.read_csv("verification/data/scenario5_resolved_with_gap.csv")
         print(f"\nData: {len(df)} sessions")
         
         df_a = df[df['variant'] == 'A']
@@ -367,7 +367,7 @@ def test_scenario6_abexp():
     start_time = time.time()
     
     try:
-        df = pd.read_csv("../data/scenario6_resolved_no_gap.csv")
+        df = pd.read_csv("verification/data/scenario6_resolved_no_gap.csv")
         print(f"\nData: {len(df)} sessions")
         
         df_a = df[df['variant'] == 'A']
@@ -417,7 +417,7 @@ def test_scenario7_abexp():
     start_time = time.time()
     
     try:
-        df = pd.read_csv("../data/scenario7_ai_metric_with_gap.csv")
+        df = pd.read_csv("verification/data/scenario7_ai_metric_with_gap.csv")
         print(f"\nData: {len(df)} sessions")
         
         df_a = df[df['variant'] == 'A']
@@ -467,7 +467,7 @@ def test_scenario8_abexp():
     start_time = time.time()
     
     try:
-        df = pd.read_csv("../data/scenario8_ai_metric_no_gap.csv")
+        df = pd.read_csv("verification/data/scenario8_ai_metric_no_gap.csv")
         print(f"\nData: {len(df)} sessions")
         
         df_a = df[df['variant'] == 'A']

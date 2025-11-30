@@ -1,9 +1,9 @@
 > Purpose: Package-level documentation for the ab_framework Python library (installation, usage, examples)
 > Generated: Manually authored, maintained under version control.
 
-# AB Testing Framework
+# AB Testing Orchestration Framework
 
-A production-ready A/B testing orchestration framework built on top of `owl_ab_test`, providing a clean, Pythonic API for experiment analysis.
+A production-ready A/B testing **orchestration and standardization layer** with pluggable statistical backends (currently `owl_ab_test`, with a `scipy` fallback planned), providing a clean, Pythonic API for experiment analysis.
 
 ## Features
 
@@ -13,7 +13,7 @@ A production-ready A/B testing orchestration framework built on top of `owl_ab_t
 ✅ **SRM (Sample Ratio Mismatch) detection** - Automatic data quality checks  
 ✅ **Sample size calculation** - Pre-experiment power analysis  
 ✅ **Flexible data sources** - Works with pandas DataFrames from any source  
-✅ **Pluggable statistical backends** - Currently uses owl_ab_test, easily extensible  
+✅ **Pluggable statistical backends** - Currently uses `owl_ab_test`, easily extensible (e.g., `scipy`)  
 ✅ **Rich reporting** - Markdown summaries, DataFrames, JSON exports
 
 ## Installation
@@ -22,7 +22,7 @@ A production-ready A/B testing orchestration framework built on top of `owl_ab_t
 pip install pandas numpy scipy owl-ab-test
 ```
 
-Then add the `ab_framework` directory to your project.
+Then add the `ab_framework` directory to your project. The framework itself is backend‑agnostic; as long as a backend implements the expected interface, callers do not need to change.
 
 ## Quick Start
 

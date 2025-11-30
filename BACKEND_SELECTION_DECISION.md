@@ -11,7 +11,7 @@
 
 ## Executive Summary
 
-After testing both packages against 8 real-world scenarios, **owl_ab_test** is recommended as the primary statistical backend for our hybrid orchestration framework.
+After testing both packages against 8 real-world scenarios, **owl_ab_test** is recommended as the primary statistical backend for our **hybrid orchestration / standardization framework**.
 
 **Key Reasons:**
 1. ✅ Simpler, cleaner API (function-based)
@@ -336,7 +336,7 @@ print(f"P-value: {p_value:.6f}")
 
 ## Final Recommendation
 
-### ✅ **Use owl_ab_test as Primary Backend**
+### ✅ **Use owl_ab_test as Primary Backend Behind the Orchestration Layer**
 
 **Reasons:**
 1. **Simpler API** - Function-based, no class instantiation
@@ -345,9 +345,9 @@ print(f"P-value: {p_value:.6f}")
 4. **Equal accuracy** - Both match ground truth
 5. **Easier to wrap** - ~30% less adapter code
 
-### 🔧 **Build scipy Backend as Fallback**
+### 🔧 **Build scipy Backend as Fallback / Alternative**
 
-If owl_ab_test ever fails or becomes unmaintained:
+If `owl_ab_test` ever fails or becomes unmaintained, or if we prefer to depend directly on `scipy` for some use cases:
 ```python
 # One-line change
 test = ABTest(backend=ScipyBackend())  # Instead of OwlBackend()
@@ -389,7 +389,7 @@ test = ABTest(backend=ScipyBackend())  # Instead of OwlBackend()
 **✅ APPROVED: Use owl_ab_test as primary backend**
 
 **Next Steps:**
-1. Update `AB_FRAMEWORK_DECISION.md` to reflect hybrid approach with owl_ab_test
+1. Update `AB_FRAMEWORK_DECISION.md` to reflect hybrid, backend‑agnostic approach with `owl_ab_test` as the initial engine
 2. Create `ab_framework/backends/owl_backend.py`
 3. Implement adapter layer (estimated 80-100 LOC)
 4. Test against all 8 verification scenarios

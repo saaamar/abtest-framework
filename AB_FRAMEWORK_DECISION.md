@@ -12,7 +12,7 @@
 
 ## Executive Summary
 
-After comprehensive empirical testing of three A/B testing approaches against **eight realistic test scenarios**, we conclude that **building a custom A/B testing orchestration framework** is the correct and necessary decision.
+After comprehensive empirical testing of three A/B testing approaches against **eight realistic test scenarios**, we conclude that **building a custom A/B testing orchestration and standardization layer** (sitting on top of existing stats packages) is the correct and necessary decision.
 
 This document combines:
 - **Scientific verification results** (Methods, Results, Statistical Analysis)
@@ -47,7 +47,7 @@ This document combines:
 - ⚠️ Code reduction: ~60% for simple cases, but orchestration still needed
 - ✅ **Validation:** Event-level data structure is industry standard and scientifically correct
 
-**Key Finding:** A custom orchestration framework built on scipy+pandas is warranted.
+**Key Finding:** A custom orchestration framework built on `scipy`/`pandas` (and other backends such as `owl_ab_test`) is warranted; we are not replacing these engines, but standardizing how we use them.
 
 ---
 
@@ -218,12 +218,12 @@ t_stat, p_value = stats.ttest_ind(df_a['session_revenue'], df_b['session_revenue
 **Original reasoning:** "Packages are broken, must build custom"  
 **New reasoning:** "Packages work for simple cases (60-71% code reduction), but multi-metric orchestration still missing"
 
-**What we're still building:**
+**What we're still building (on top of existing libraries):**
 1. ✅ Multi-metric dashboard support (Bonferroni correction)
 2. ✅ SRM checks and data quality monitoring
 3. ✅ Power analysis and sample size calculation
 4. ✅ Standardized reporting and output formats
-5. ⚠️ Consider: Can we use abexp/owl for simple cases and only build orchestration layer?
+5. ✅ A stable internal API that can route to different statistical backends (e.g., `owl_ab_test` today, `scipy` tomorrow) without changing caller code
 
 **Key Takeaway:** The verification process revealed that proper data structure is MORE important than package selection.
 

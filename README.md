@@ -3,11 +3,11 @@
 
 [TOC]
 
-# 🧠 Dynamic A/B Testing Analysis Framework
+# 🧠 A/B Testing Analysis Standardization Layer
 
 > **How to use these docs**
 >
-> * Start with this `README.md` to understand what the framework does, how it fits into your experimentation stack, and how to configure and call its APIs.
+> * Start with this `README.md` to understand what the **standardization layer** does, how it fits into your experimentation stack, and how to configure and call its APIs.
 > * Use `AB_TESTING_THEORY.md` for the detailed statistical background: full math, derivations, and methodology justifications that underpin the helpers and decisions described here.
 
 ## 1. 🔬 Understanding A/B Testing: Goals and Fundamentals
@@ -121,14 +121,14 @@ The detailed trade‑offs (including the bot example, correlation, and cluster�
 
 ### Statistical Framework (high level)
 
-For this package, you mainly need to configure a small set of **statistical knobs**:
+For this package, you mainly need to configure a small set of **statistical knobs**. Under the hood, the framework delegates actual test computations to well‑known Python libraries via **pluggable backends** (currently `owl_ab_test`, with a `scipy` backend planned as a fallback). The orchestration layer stays the same even if the backend changes.
 
 * **Significance level (α)** – false‑positive budget (often 0.05).
 * **Statistical power (1−β)** – probability of detecting a true effect when it exists (often 0.8).
 * **Minimum Detectable Effect (MDE)** – smallest lift that is business‑meaningful, defined relative to the baseline.
 * **Sample size** – number of randomized units required, computed from the above.
 
-Under the hood, the framework uses standard tests:
+Under the hood, the framework uses standard tests implemented in the chosen backend:
 
 * Proportion tests for **rate metrics** (e.g., conversion, CTR).
 * Mean tests (e.g., Welch’s t‑test) for **continuous metrics** (e.g., revenue per user, time).
@@ -473,7 +473,7 @@ n_continuous = 2 * (z_alpha + z_beta)² * σ² / (effect_size)²
 ## 6. 🔢 Single vs. Multi-Metric Testing
 
 ### Current Framework Scope: Single Primary Metric
-**For this framework, we focus on ONE primary metric per experiment:**
+**For this framework’s decision helpers, we focus on ONE primary metric per experiment:**
 - Simpler statistical analysis
 - Clear decision-making criteria  
 - Avoids multiple testing problems
@@ -529,15 +529,15 @@ Where correction_factor depends on:
 
 ## 7. 🎯 Framework Purpose and Vision
 
-A **generic, reusable A/B testing analysis framework** in Python — a package that is **agnostic to the product domain**, **metric type**, and **treatment design**, yet flexible enough to plug into *any system* where A/B experiments run (web UI, backend algorithms, etc.).
+An internal, reusable **A/B testing analysis standardization layer** in Python — a package that is **agnostic to the product domain**, **metric type**, **statistical backend**, and **treatment design**, yet flexible enough to plug into *any system* where A/B experiments run (web UI, backend algorithms, etc.).
 
 ### Core Mission
 
 * **Ingest near real-time experiment data** (from log files or streams)
 * **Compute experiment metrics dynamically**, regardless of whether they are CTR, Conversion Rate, Revenue per User, etc.
-* **Perform rigorous statistical analysis** (power, alpha, confidence intervals, significance tests)
+* **Orchestrate rigorous statistical analysis** (power, alpha, confidence intervals, significance tests) using pluggable backends such as `owl_ab_test` or `scipy`.
 * **Monitor experiment progress and data quality** (sample size, traffic balance, contamination, etc.)
-* **Be modular**, allowing integration into different company systems and different types of experiments
+* **Be modular**, allowing integration into different company systems and different types of experiments, without coupling callers to any particular stats library.
 
 ---
 
@@ -555,10 +555,10 @@ The framework integrates with a **running experimentation system** that:
 ### Framework's Role in Data Science Workflow
 
 * **Automate sample size calculations** based on user-defined parameters
-* **Standardize statistical testing** across different experiment types
+* **Standardize statistical testing** across different experiment types and underlying libraries
 * **Provide real-time experiment monitoring** and data quality checks
 * **Generate interpretable reports** for stakeholders and decision-makers
-* **Ensure statistical rigor** while maintaining ease of use
+* **Ensure statistical rigor** while keeping the choice of backend implementation an internal concern
 
 ---
 

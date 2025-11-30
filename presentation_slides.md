@@ -278,35 +278,42 @@ Ground Truth: p=0.383397, A=0.1000, B=0.1120
 
 ---
 
-## Slide 12 – What the Framework Adds on Top of scipy+pandas
+## Slide 12 – What the Framework Adds vs scipy, owl, and abexp
 
-**Encodes shared patterns:**
+**Encodes shared patterns (beyond owl/abexp):**
 - Metric registration and configuration  
 - Automatic choice of appropriate tests per metric type (binary vs continuous)  
 - Standardized result objects (values, effects, intervals, decisions)
 - Proper data aggregation (impression→user, session→user)
+- Multi-metric experiment view and multiple-testing corrections (Bonferroni, etc.)
 
-**Integrates health checks:**
+**Integrates health checks and planning (missing in owl/abexp):**
 - SRM checks via `QualityChecker.check_srm`  
 - Data quality checks via `QualityChecker.check_data_quality`  
+- Sample size / power helpers and duration estimates
 - Validation before running expensive statistical tests
 
-**Reduces boilerplate:**
-- Compresses ~25-60 LOC (scipy+pandas) → ~10-15 LOC (framework)
-- Encourages consistent analysis patterns across engineers and projects  
-- Makes experiments easier to review and understand
+**Reduces boilerplate and code lines (illustrative):**
+- Raw scipy+pandas typically requires more user-written code per experiment (ingestion, aggregation, test, interpretation)  
+- owl_ab_test and abexp shorten the test call but still require separate pandas preprocessing and decision logic in each notebook  
+- The framework centralizes these patterns so new experiments are usually configured with a small metric function + config, instead of re-implementing a full pipeline each time
 
-**Example:**
+**Code footprint comparison (sketch):**
 ```python
-# Before: ~40 LOC of pandas + scipy code
-# After:
-experiment = ABExperiment(
-    data=df,
-    metrics=[conversion_rate, revenue_per_user],
-    variant_column='variant'
-)
-result = experiment.analyze()
+# owl_ab_test (per experiment, simplified)
+result = calculate_proportion_stats(success_b, total_b, success_a, total_a)
+
+# abexp (per experiment, simplified)
+analyzer = FrequentistAnalyzer()
+p_value, ci_a, ci_b = analyzer.compare_conv_obs(a_conv, a_total, b_conv, b_total)
+
+# Our framework (per experiment)
+framework = ABTestFramework(config, metric_fn=conversion_rate)
+results = framework.get_latest_analysis()
 ```
+
+**Takeaway:**
+- owl/abexp are **statistical engines**; our framework is an **orchestration layer** that standardizes workflows, adds safety checks, and shrinks the *per-experiment* code your team writes.
 
 ---
 

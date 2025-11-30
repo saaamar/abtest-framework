@@ -70,13 +70,11 @@ This is your existing system that owns **traffic and logging**. It is responsibl
         U1      | control            | 2025-11-10T10:00:00Z | live
         U1      | shadow_variant_B   | 2025-11-10T10:00:00Z | shadow
         ```
-
     * Produce an **events/metrics table**, for example:
 
         ```text
         unit_id | variant_label      | metric_value | timestamp           | ...
         ------- | ------------------ | ------------ | ------------------- | ---
-        U1      | control            | 0.031        | 2025-11-10T10:00:01Z| ...
         U1      | shadow_variant_B   | 0.029        | 2025-11-10T10:00:01Z| ...
         ```
 
@@ -116,7 +114,6 @@ When configuring this package you must choose a **`unit_id`** (for example `user
 
 * Most product teams should start with **user‑level experiments** (`unit_id = user_id`) for user‑centric metrics.
 * Conversation‑ or session‑level units are appropriate only when the metric and experience are truly conversation/session‑centric and you are comfortable with mixed exposure across a user’s lifetime.
-* Whatever you randomize on, you should **aggregate and analyze at that same unit** before passing data into the framework.
 
 The detailed trade‑offs (including the bot example, correlation, and cluster‑robust analysis) are covered in:
 
@@ -148,7 +145,6 @@ This framework provides the `SampleSizeCalculator` class to turn your **statisti
 At configuration time you typically provide:
 
 * Statistical parameters: **α**, **power (1−β)**, and an **MDE** (defined relative to the baseline).
-* Business parameters: **baseline level** of the primary metric and **traffic allocation** (e.g., 50/50 vs 90/10).
 
 Given these, the helpers:
 
@@ -165,7 +161,6 @@ All underlying formulas (e.g., for proportions, continuous metrics, and practica
 
 ### Step-by-Step Process
 
-#### 1. **Planning Phase**
 
 High‑level planning follows:
 
@@ -195,20 +190,16 @@ from ab_framework import SampleSizeCalculator
 calc = SampleSizeCalculator()
 result = calc.for_proportion(
     baseline_rate=baseline_rate,
-    mde=meaningful_lift,
     alpha=alpha,
     power=power
 )
 
 total_sample_size = result['total_size']
-print(f"Required sample size: {total_sample_size:,}")
 print(f"  Control: {result['control_size']:,}")
-print(f"  Treatment: {result['treatment_size']:,}")
 
 # Step 5: Estimate experiment duration (manual calculation)
 daily_users = 10000  # Historical average daily user count
 daily_experiment_users = daily_users * experiment_traffic_pct
-buffer_factor = 1.2  # 20% buffer for traffic fluctuations
 
 duration_days = math.ceil((total_sample_size * buffer_factor) / daily_experiment_users)
 print(f"Estimated duration: {duration_days} days")
@@ -919,7 +910,137 @@ shadow_experiment:
 
 ---
 
-## 18. 🏁 Summary
+## 18. 📉 Code Footprint: scipy vs owl vs abexp vs This Framework
+
+One of the practical benefits of this package is a **reduction in per‑experiment user‑written code**, because common patterns live in the framework instead of in each notebook.
+
+### 18.1 Side‑by‑Side Code Sketch (Simple Conversion Test)
+
+**Raw `scipy+pandas` (analysis + orchestration in one place)**
+
+```python
+import pandas as pd
+from scipy import stats
+
+df = pd.read_csv("sessions.csv")
+df = df[df["in_experiment"] == 1]
+
+user_level = (
+    df.groupby(["user_id", "variant_label"])
+      .agg(converted=("converted_this_session", "max"))
+      .reset_index()
+)
+
+a = user_level[user_level["variant_label"] == "control"]
+b = user_level[user_level["variant_label"] == "treatment"]
+
+success_a = a["converted"].sum(); total_a = len(a)
+success_b = b["converted"].sum(); total_b = len(b)
+
+prop_a = success_a / total_a
+prop_b = success_b / total_b
+
+stat, p_value = stats.proportions_ztest(
+    [success_b, success_a],
+    [total_b, total_a],
+)
+
+lift = (prop_b - prop_a) / prop_a
+```
+
+- In practice, these scripts often end up with **dozens of lines** per scenario once you include SRM checks, logging, and interpretation.
+
+**`owl_ab_test` (nicer API but still per‑experiment orchestration)**
+
+```python
+import pandas as pd
+from owl_ab_test import calculate_proportion_stats
+
+df = pd.read_csv("sessions.csv")
+df = df[df["in_experiment"] == 1]
+
+user_level = (
+    df.groupby(["user_id", "variant_label"])
+      .agg(converted=("converted_this_session", "max"))
+      .reset_index()
+)
+
+a = user_level[user_level["variant_label"] == "control"]
+b = user_level[user_level["variant_label"] == "treatment"]
+
+result = calculate_proportion_stats(
+    success_count=b["converted"].sum(),
+    total_count=len(b),
+    control_success=a["converted"].sum(),
+    control_total=len(a),
+    confidence_level=0.95,
+)
+
+p_value = result["p_value"]
+lift = result["lift"]
+```
+
+- The `owl_ab_test` call itself is short, but you still write the same pandas aggregation and any SRM / decision logic per experiment.
+
+**`abexp` (class‑based API, similar orchestration cost)**
+
+```python
+from abexp.core.analysis_frequentist import FrequentistAnalyzer
+
+analyzer = FrequentistAnalyzer()
+p_value, ci_control, ci_treatment = analyzer.compare_conv_obs(
+    control_conversions=success_a,
+    control_trials=total_a,
+    variation_conversions=success_b,
+    variation_trials=total_b,
+    alpha=0.05,
+)
+```
+
+- Adds an analyzer object and tuple unpacking on top of the same preprocessing.
+
+**This framework (orchestration layer on top of these engines)**
+
+```python
+from ab_framework import ABTestFramework
+
+config = {
+    "experiment": {
+        "name": "homepage_banner_test",
+        "alpha": 0.05,
+        "power": 0.8,
+        "unit_id": "user_id",
+        "metric": "conversion_rate",
+    },
+    "data_sources": {
+        "assignment": "assignment_table_path_or_query",
+        "events": "event_table_path_or_query",
+    },
+}
+
+def conversion_rate(df):
+    return (df["converted_this_session"].max())
+
+framework = ABTestFramework(config=config, metric_fn=conversion_rate)
+results = framework.get_latest_analysis()
+
+print(results["decision"], results["p_value"], results["lift"])
+```
+
+- The framework call is similarly compact, but the key difference is that common ingestion, aggregation, SRM checks, sample‑size logic,
+  and Go/NoGo decision helpers are implemented once in the framework instead of re-written in every notebook.
+
+### 18.2 Takeaways for Engineers and Managers
+
+- owl/abexp are excellent **statistical engines**, but each team still needs to hand‑roll
+  ingestion, aggregation, checks, and decision logic per experiment.
+- This framework moves that boilerplate into a **reusable orchestration layer**, which in practice
+  reduces the amount of custom analysis code per experiment, encourages more consistent patterns across teams,
+  and lowers the risk of subtle statistical or data‑handling bugs.
+
+---
+
+## 19. 🏁 Summary
 
 This framework will:
 

@@ -142,29 +142,29 @@ Ground Truth: p=0.383397, A=0.1000, B=0.1120
 
 ---
 
-## Slide 7 – The Gap: What's Missing from Existing Solutions
+## Slide 7 – The Gap: Need for Production Standardization
 
 **What we learned from verification:**
 
-1. **No drop-in solution exists** that:
-   - ✅ Works reliably (installation, modern Python)
-   - ✅ Supports our DataFrame-based, on-demand workflow
-   - ✅ Handles complex metrics (filtering, aggregation, ratios)
-   - ✅ Provides multi-metric analysis + corrections
-   - ✅ Includes quality checks (SRM, data validation)
+1. **No single package fits all needs:**
+   - Each package (scipy, owl, abexp) has different APIs and limitations
+   - Using multiple packages leads to inconsistent analysis
+   - Teams writing custom code for each experiment
+   - Risk: Same experiment analyzed differently by different people
 
-2. **The gap is orchestration, not statistics:**
-   - Statistical formulas are well-established (scipy works)
-   - Problem: Repetitive boilerplate for each experiment
-   - Need: Reusable patterns around the core stats
+2. **The problem is standardization, not statistics:**
+   - Statistical formulas are well-established (scipy, owl work)
+   - Problem: Each experiment re-implements the same patterns
+   - Need: **Internal standard interface** that works regardless of underlying package
 
-3. **Real-world requirements:**
-   - Custom metrics (not just simple conversion)
-   - Mixed data granularities (user/session/impression)
-   - Quality checks before decisions
-   - Consistent analysis across team
+3. **Production requirements:**
+   - Consistent API across all experiments
+   - Package-agnostic (can switch backends without changing user code)
+   - Quality checks built-in (SRM, validation)
+   - Clear contract for teams to follow
+   - Reproducible, auditable analysis
 
-**Conclusion from verification:** Build a lightweight orchestration layer on scipy+pandas
+**Conclusion from verification:** Create an internal standardization layer that can use ANY statistical package underneath
 
 ---
 
@@ -188,63 +188,76 @@ Ground Truth: p=0.383397, A=0.1000, B=0.1120
 - Clear error messages and validation
 
 **Scope (what this work is NOT):**
+- A new A/B testing package competing with scipy/owl/abexp
 - A full experimentation platform / UI  
 - A replacement for your data pipeline
 - A tutorial on A/B testing statistics
 
+**What this IS:**
+- An internal standardization layer for production use
+- A stable interface that hides implementation details
+- Package-agnostic: can use scipy, owl, or any other backend
+- A way to ensure consistent analysis across teams
+
 ---
 
-## Slide 9 – High-Level Architecture
+## Slide 9 – High-Level Architecture: Standardization Layer
 
-**`ab_framework.core`**
-- Experiment orchestration and decision logic  
-- Knows about variants, metrics, configs, and how to call backends  
+**`ab_framework.core` (Public Interface)**
+- **Standardized experiment API** that teams use
+- Knows about variants, metrics, configs
+- **Package-agnostic:** delegates to interchangeable backends
 
-**`ab_framework.sample_size`**
-- Utilities for sample size / power-related calculations (where needed)  
-
-**`ab_framework.quality`**
-- **Data quality and experiment health checks (not business guardrails)**  
-- `check_srm`: chi-square Sample Ratio Mismatch test on variant counts  
-- `check_data_quality`: missingness + IQR-based outlier analysis on metric columns  
-
-**`ab_framework.backends`**
-- Backend interface + concrete implementations (OWL-based backend)  
+**`ab_framework.backends` (Pluggable Engines)**
+- **Backend abstraction:** can use scipy, owl, abexp, or custom implementations
+- Currently implemented: OWL-based backend (but easily swappable)
 - Input: cleaned metric data + configuration  
 - Output: effect sizes, confidence intervals, p-values, decision flags  
+- **Key benefit:** Switch statistical packages without changing user code
+
+**`ab_framework.quality` (Built-in Safety)**
+- SRM checks, data validation (missing values, outliers)
+- Runs automatically before analysis
+- Ensures experiments meet quality standards
+
+**`ab_framework.sample_size` (Planning Tools)**
+- Sample size / power calculations
+- Duration estimates
 
 **Verification Infrastructure:**
-- `verification/data_generator.py`: Creates 8 scenario datasets (reproducible, seed=42)
-- `verification/ground_truth.py`: Computes correct answers for all scenarios
-- `verification/tests/`: Test implementations for scipy, abexp, owl, and our framework
-- `run_comparison_all.py`: Automated comparison of all approaches
+- Proves correctness regardless of backend choice
+- Ensures consistency when switching packages
+- Regression tests for production safety
 
 ---
 
-## Slide 10 – Backend Abstraction & Result Model
+## Slide 10 – Backend Abstraction: Package-Agnostic Design
 
-**Backend abstraction:**
-- Minimal contract for a statistical engine behind the scenes  
-- **Inputs:**
-  - Variant-level metric data  
-  - Configuration (alpha, tails, multiple-testing behavior, etc.)  
-- **Outputs:**
-  - Effect sizes, p-values, confidence intervals, decision flags, diagnostics  
+**The standardization advantage:**
+- Teams write experiments ONCE using our standard interface
+- We can switch statistical packages underneath without breaking user code
+- Example: Start with owl, switch to scipy, add Bayesian later
+- **Users never rewrite their experiments**
 
-**Data / result model:**
-- Unified representation of:
-  - Metrics (binary, continuous, AI metric, etc.)  
-  - Variants and groups  
-  - Per-metric and overall decisions  
-- Designed to be:
-  - Machine-readable  
-  - Easy to compare across backends and against ground truth  
-  - Extensible for new metric types
+**Backend contract (internal):**
+- Minimal interface any package must implement:
+  - **Inputs:** Variant-level metric data + configuration
+  - **Outputs:** Effect sizes, p-values, CIs, decisions
+- Current implementation: OWL
+- Future options: scipy direct, abexp (if fixed), Bayesian, bootstrap
 
-**Why this matters:**
-- Swap backends without changing experiment code
-- Compare results across implementations
-- Validate against ground truth systematically
+**Unified result model:**
+- Same structure regardless of backend:
+  - `metric_results`: per-metric statistics
+  - `summary()`: human-readable output
+  - `to_dict()`: JSON for dashboards/logging
+- Teams consume results the same way, always
+
+**Why this matters for production:**
+- ✅ Consistent analysis across all experiments
+- ✅ Easy to upgrade/change statistical packages
+- ✅ Reproducible: config + data → same results
+- ✅ Auditable: clear separation of interface vs implementation
 
 ---
 
@@ -278,42 +291,45 @@ Ground Truth: p=0.383397, A=0.1000, B=0.1120
 
 ---
 
-## Slide 12 – What the Framework Adds vs scipy, owl, and abexp
+## Slide 12 – What This Standardization Layer Provides
 
-**Encodes shared patterns (beyond owl/abexp):**
-- Metric registration and configuration  
-- Automatic choice of appropriate tests per metric type (binary vs continuous)  
-- Standardized result objects (values, effects, intervals, decisions)
-- Proper data aggregation (impression→user, session→user)
-- Multi-metric experiment view and multiple-testing corrections (Bonferroni, etc.)
-
-**Integrates health checks and planning (missing in owl/abexp):**
-- SRM checks via `QualityChecker.check_srm`  
-- Data quality checks via `QualityChecker.check_data_quality`  
-- Sample size / power helpers and duration estimates
-- Validation before running expensive statistical tests
-
-**Reduces boilerplate and code lines (illustrative):**
-- Raw scipy+pandas typically requires more user-written code per experiment (ingestion, aggregation, test, interpretation)  
-- owl_ab_test and abexp shorten the test call but still require separate pandas preprocessing and decision logic in each notebook  
-- The framework centralizes these patterns so new experiments are usually configured with a small metric function + config, instead of re-implementing a full pipeline each time
-
-**Code footprint comparison (sketch):**
+**1. Consistent Interface (regardless of backend):**
 ```python
-# owl_ab_test (per experiment, simplified)
-result = calculate_proportion_stats(success_b, total_b, success_a, total_a)
+# Same code works whether using owl, scipy, or future packages
+test = ABTest(name="pricing_test", data=df, variant_col="variant", unit_id="user_id")
 
-# abexp (per experiment, simplified)
-analyzer = FrequentistAnalyzer()
-p_value, ci_a, ci_b = analyzer.compare_conv_obs(a_conv, a_total, b_conv, b_total)
+@test.metric
+def conversion_rate(data):
+    return data.groupby('user_id')['converted'].max()
 
-# Our framework (per experiment)
-framework = ABTestFramework(config, metric_fn=conversion_rate)
-results = framework.get_latest_analysis()
+results = test.analyze(['conversion_rate'])
 ```
+- Teams learn ONE way to run experiments
+- We can change backends without teams noticing
+- All experiments get same quality checks automatically
+
+**2. Production-Ready Features (built into every experiment):**
+- ✅ **SRM checks:** Automatic detection of randomization issues
+- ✅ **Multi-metric support:** Dashboard view with proper corrections
+- ✅ **Data validation:** Missing values, outliers, type checks
+- ✅ **Structured output:** JSON for logging, markdown for reports
+- ✅ **Sample size planning:** Integrated power analysis
+
+**3. Reduces Maintenance Burden:**
+- Without standardization: Each team implements their own patterns
+  - Different statistical packages
+  - Different validation logic
+  - Different result formats
+  - **Risk:** Same experiment, different conclusions
+- With standardization: One interface, consistent everywhere
+  - **Benefit:** Fix a bug once, all experiments benefit
+  - **Benefit:** Add a feature once, available everywhere
+  - **Benefit:** Switch packages once, no team code changes
 
 **Takeaway:**
-- owl/abexp are **statistical engines**; our framework is an **orchestration layer** that standardizes workflows, adds safety checks, and shrinks the *per-experiment* code your team writes.
+- This is NOT a new statistical package competing with scipy/owl/abexp
+- This IS an **internal production standard** that uses those packages underneath
+- We're standardizing HOW we do A/B testing, not reinventing statistics
 
 ---
 
@@ -366,14 +382,14 @@ python run_comparison_all.py
 - Tested owl_ab_test (partial success)
 - **Decision:** Build on scipy+pandas
 
-**4. Design & implement** (Weeks 4-6)
-- Modular architecture (core, backends, quality, sample_size)
-- Start simple, iterate based on scenarios
-- Verify each component against ground truth
+**3. Design standardization layer** (Weeks 4-6)
+- Modular architecture with pluggable backends
+- Start with owl backend (can swap later)
+- Verify against ground truth with ANY backend choice
 
 **5. Continuous verification** (Ongoing)
 - Run full test suite on every change
-- Document any deviations
+- Ensures consistency when switching backends
 - Regression tests prevent backsliding
 
 ---
@@ -392,10 +408,10 @@ python run_comparison_all.py
    - Mixed granularities (user/session/impression) surface real complexity
    - Multi-metric scenario forced proper correction handling
 
-3. **The gap is orchestration**
-   - Core statistical formulas are well-established
-   - Problem: Making them ergonomic and consistent
-   - Solution: Thin layer around proven scipy code
+3. **The gap is standardization**
+   - Core statistical packages (scipy, owl) already work
+   - Problem: Teams using them inconsistently
+   - Solution: Standard interface that can use ANY package underneath
 
 4. **Documentation through examples**
    - 8 scenarios serve as both tests AND documentation
@@ -440,10 +456,11 @@ python run_comparison_all.py
 - Not abstract capabilities
 - Easy to explain value to stakeholders
 
-**3. Build on proven foundations**
-- scipy+pandas is battle-tested
-- We add orchestration, not new stats
-- Lower risk than novel implementations
+**3. Don't reinvent the wheel**
+- scipy, owl, pandas are all battle-tested
+- We standardize HOW they're used, not replace them
+- Backend-agnostic design: use any package underneath
+- Lower risk than building new statistical methods
 
 **4. Make verification automatic**
 - `python run_comparison_all.py` validates everything
@@ -460,24 +477,27 @@ python run_comparison_all.py
 ## Slide 18 – Summary
 
 **The Problem:**
-- Off-the-shelf A/B packages didn't meet our practical workflow requirements
-- Risk of inconsistent analysis across experiments
-- No reliable solution for custom metrics and mixed granularities
+- Multiple A/B testing packages (scipy, owl, abexp) each with different APIs
+- Teams implementing experiments inconsistently
+- Risk: Same experiment analyzed differently by different people
+- Need: Production-ready standard that works regardless of underlying package
 
 **The Process:**
 - Verification-first: Created 8 scenarios with ground truth
-- Evaluated 3 approaches systematically
-- Made data-driven decision to build on scipy+pandas
+- Evaluated existing packages systematically
+- Made data-driven decision: **standardize, don't reinvent**
 
 **The Solution:**
-- Modular framework with clean separation of concerns
+- **Internal standardization layer** with pluggable backends
+- Consistent interface for teams (hides package differences)
+- Currently uses owl; can switch to scipy, abexp, or others without breaking user code
 - 100% verified against ground truth on all scenarios
-- Reduces boilerplate while maintaining statistical correctness
 
 **The Outcome:**
-- More reliable, reproducible, and consistent A/B analysis
-- Automated regression tests prevent future bugs
-- Clear path for extending to new scenarios
-- Production-ready with confidence from comprehensive verification
+- ✅ **One way** to run experiments across the company
+- ✅ **Consistent analysis** regardless of who runs it
+- ✅ **Easy to maintain:** fix once, benefits everywhere
+- ✅ **Future-proof:** swap statistical packages without rewriting experiments
+- ✅ **Production-ready:** automated quality checks, validation, regression tests
 
-**Key Takeaway:** Verification isn't overhead—it's the foundation that enabled confident, rapid development.
+**Key Takeaway:** We're not building a new A/B testing package—we're standardizing how we use existing ones for production reliability.

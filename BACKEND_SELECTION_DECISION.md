@@ -31,9 +31,10 @@ After testing both packages against 8 real-world scenarios, **owl_ab_test** is r
 | **Return Format** | Dict `{'p_value': x, 'lift': y}` | Tuple `(p_val, ci_a, ci_b)` | **owl** 🏆 |
 | **Dependencies** | scipy, numpy | scipy, numpy, pandas, statsmodels | **owl** 🏆 |
 | **Code Simplicity** | Direct function calls | Need analyzer instance | **owl** 🏆 |
+| **Sample Size / Power API** | ❌ None built-in | ✅ `SampleSize.ssd_prop/ssd_mean` helpers | **abexp** 🏆 |
 | **Maintenance** | Active (Nov 2024) | Active (PlaytikaOSS) | TIE ✅ |
 
-**Score: owl_ab_test wins 4 categories, ties 2, loses 0**
+**Score: owl_ab_test wins 4 categories, ties 2, loses 1; abexp uniquely provides a sample-size helper API but is otherwise less aligned with our backend needs.**
 
 ---
 

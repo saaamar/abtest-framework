@@ -179,8 +179,8 @@ While scipy+pandas can do everything we need:
 
 ### Why Not Existing Packages?
 
-- **abexp:** Abandoned, session-based, inflexible metrics
-- **owl_ab_test:** Great for basic tests, but no orchestration features
+- **abexp:** Provides a basic sample-size API (`SampleSize.ssd_prop()` / `SampleSize.ssd_mean()`), but is effectively abandoned and hard to run on modern Python; its metric model is still session-based and inflexible for our orchestration needs.
+- **owl_ab_test:** Great for basic tests (proportions and means) with a clean API, but exposes **no sample-size/power interface** and offers no orchestration features (multi-metric, corrections, SRM).
 - **py-ab-testing:** Database-coupled, complex setup, fixed metrics
 
 ## Code Quality

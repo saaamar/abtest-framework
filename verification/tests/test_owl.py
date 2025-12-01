@@ -7,8 +7,12 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Any
 import time
+import os
 
-def test_scenario1_owl():
+
+DEFAULT_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data")
+
+def test_scenario1_owl(data_dir: str = DEFAULT_DATA_DIR):
     """
     Scenario 1: Simple Conversion Rate Test using owl_ab_test
     
@@ -24,7 +28,7 @@ def test_scenario1_owl():
         from owl_ab_test import calculate_proportion_stats
         
         # Load impression-level data
-        df = pd.read_csv("verification/data/scenario1_conversion.csv")
+        df = pd.read_csv(os.path.join(data_dir, "scenario1_conversion.csv"))
         
         print(f"\nData: {len(df)} impressions from {df['user_id'].nunique()} users")
         
@@ -100,7 +104,7 @@ def test_scenario1_owl():
             'reason': f'Unexpected error: {e}'
         }
 
-def test_scenario2_owl():
+def test_scenario2_owl(data_dir: str = DEFAULT_DATA_DIR):
     """
     Scenario 2: Revenue per Active User (Custom Metric) using owl_ab_test
     
@@ -116,7 +120,7 @@ def test_scenario2_owl():
         from owl_ab_test import calculate_revenue_stats
         
         # Load session-level data
-        df = pd.read_csv("verification/data/scenario2_revenue.csv")
+        df = pd.read_csv(os.path.join(data_dir, "scenario2_revenue.csv"))
         
         print(f"\nData: {len(df)} sessions from {df['user_id'].nunique()} active users")
         
@@ -187,7 +191,7 @@ def test_scenario2_owl():
             'reason': f'Error: {e}'
         }
 
-def test_scenario3_owl():
+def test_scenario3_owl(data_dir: str = DEFAULT_DATA_DIR):
     """
     Scenario 3: CTR with Impression-Level Data using owl_ab_test
     
@@ -206,7 +210,7 @@ def test_scenario3_owl():
         from owl_ab_test import calculate_proportion_stats
         
         # Load impression-level data
-        df = pd.read_csv("verification/data/scenario3_ctr.csv")
+        df = pd.read_csv(os.path.join(data_dir, "scenario3_ctr.csv"))
         
         print(f"\nData: {len(df)} impressions from {df['user_id'].nunique()} users")
         
@@ -273,7 +277,7 @@ def test_scenario3_owl():
             'reason': f'Error: {e}'
         }
 
-def test_scenario4_owl():
+def test_scenario4_owl(data_dir: str = DEFAULT_DATA_DIR):
     """
     Scenario 4: Multi-Metric Dashboard using owl_ab_test
     
@@ -289,7 +293,7 @@ def test_scenario4_owl():
         from owl_ab_test import calculate_revenue_stats
         
         # Load session-level data
-        df = pd.read_csv("verification/data/scenario4_multi.csv")
+        df = pd.read_csv(os.path.join(data_dir, "scenario4_multi.csv"))
         
         print(f"\nData: {len(df)} sessions from {df['user_id'].nunique()} users")
         
@@ -337,7 +341,7 @@ def test_scenario4_owl():
             'reason': f'Error: {e}'
         }
 
-def test_scenario5_owl():
+def test_scenario5_owl(data_dir: str = DEFAULT_DATA_DIR):
     """
     Scenario 5: Agent Bot - Resolved Rate WITH gap
     Session-level binary metric (similar to scenario 1)
@@ -351,7 +355,7 @@ def test_scenario5_owl():
     try:
         from owl_ab_test import calculate_proportion_stats
         
-        df = pd.read_csv("verification/data/scenario5_resolved_with_gap.csv")
+        df = pd.read_csv(os.path.join(data_dir, "scenario5_resolved_with_gap.csv"))
         print(f"\nData: {len(df)} sessions")
         
         df_a = df[df['variant'] == 'A']
@@ -396,7 +400,7 @@ def test_scenario5_owl():
         print(f"\n❌ ERROR: {e}")
         return {'scenario': 'Scenario 5', 'works': False, 'time': elapsed, 'reason': str(e)}
 
-def test_scenario6_owl():
+def test_scenario6_owl(data_dir: str = DEFAULT_DATA_DIR):
     """
     Scenario 6: Agent Bot - Resolved Rate NO gap
     Session-level binary metric
@@ -410,7 +414,7 @@ def test_scenario6_owl():
     try:
         from owl_ab_test import calculate_proportion_stats
         
-        df = pd.read_csv("verification/data/scenario6_resolved_no_gap.csv")
+        df = pd.read_csv(os.path.join(data_dir, "scenario6_resolved_no_gap.csv"))
         print(f"\nData: {len(df)} sessions")
         
         df_a = df[df['variant'] == 'A']
@@ -455,7 +459,7 @@ def test_scenario6_owl():
         print(f"\n❌ ERROR: {e}")
         return {'scenario': 'Scenario 6', 'works': False, 'time': elapsed, 'reason': str(e)}
 
-def test_scenario7_owl():
+def test_scenario7_owl(data_dir: str = DEFAULT_DATA_DIR):
     """
     Scenario 7: Agent Bot - AI Quality Metric WITH gap
     Session-level continuous metric (similar to scenario 2)
@@ -469,7 +473,7 @@ def test_scenario7_owl():
     try:
         from owl_ab_test import calculate_revenue_stats
         
-        df = pd.read_csv("verification/data/scenario7_ai_metric_with_gap.csv")
+        df = pd.read_csv(os.path.join(data_dir, "scenario7_ai_metric_with_gap.csv"))
         print(f"\nData: {len(df)} sessions")
         
         df_a = df[df['variant'] == 'A']
@@ -518,7 +522,7 @@ def test_scenario7_owl():
         print(f"\n❌ ERROR: {e}")
         return {'scenario': 'Scenario 7', 'works': False, 'time': elapsed, 'reason': str(e)}
 
-def test_scenario8_owl():
+def test_scenario8_owl(data_dir: str = DEFAULT_DATA_DIR):
     """
     Scenario 8: Agent Bot - AI Quality Metric NO gap
     Session-level continuous metric
@@ -532,7 +536,7 @@ def test_scenario8_owl():
     try:
         from owl_ab_test import calculate_revenue_stats
         
-        df = pd.read_csv("verification/data/scenario8_ai_metric_no_gap.csv")
+        df = pd.read_csv(os.path.join(data_dir, "scenario8_ai_metric_no_gap.csv"))
         print(f"\nData: {len(df)} sessions")
         
         df_a = df[df['variant'] == 'A']
@@ -581,7 +585,7 @@ def test_scenario8_owl():
         print(f"\n❌ ERROR: {e}")
         return {'scenario': 'Scenario 8', 'works': False, 'time': elapsed, 'reason': str(e)}
 
-def run_all_owl_tests():
+def run_all_owl_tests(data_dir: str = DEFAULT_DATA_DIR):
     """Run all owl_ab_test tests and summarize"""
     print("\n" + "="*70)
     print("OWL_AB_TEST PACKAGE EVALUATION")
@@ -589,14 +593,14 @@ def run_all_owl_tests():
     print("="*70)
     
     results = []
-    results.append(test_scenario1_owl())
-    results.append(test_scenario2_owl())
-    results.append(test_scenario3_owl())
-    results.append(test_scenario4_owl())
-    results.append(test_scenario5_owl())
-    results.append(test_scenario6_owl())
-    results.append(test_scenario7_owl())
-    results.append(test_scenario8_owl())
+    results.append(test_scenario1_owl(data_dir=data_dir))
+    results.append(test_scenario2_owl(data_dir=data_dir))
+    results.append(test_scenario3_owl(data_dir=data_dir))
+    results.append(test_scenario4_owl(data_dir=data_dir))
+    results.append(test_scenario5_owl(data_dir=data_dir))
+    results.append(test_scenario6_owl(data_dir=data_dir))
+    results.append(test_scenario7_owl(data_dir=data_dir))
+    results.append(test_scenario8_owl(data_dir=data_dir))
     
     # Summary
     print("\n" + "="*70)

@@ -391,14 +391,14 @@ class ExperimentResults:
         # Metrics
         lines.append("## Metric Results")
         lines.append("")
-        
+
         for metric_name, result in self.metric_results.items():
             if 'error' in result:
                 lines.append(f"### [ERROR] {metric_name}")
                 lines.append(f"Error: {result['error']}")
+                lines.append("")
+                continue
 
-            continue
-            
             sig_icon = '[SIG]' if result['significant'] else '[NOT-SIG]'
             lines.append(f"### {sig_icon} {metric_name}")
             lines.append(f"- **Type:** {result['metric_type']}")

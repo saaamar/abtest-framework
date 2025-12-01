@@ -1,14 +1,23 @@
-"""
-Example showing a statistically SIGNIFICANT result.
+"""Example showing a statistically SIGNIFICANT result.
 
 This demonstrates the conclusion output for a test that detects a real effect.
 """
 
-from ab_framework import ABTest
+import os
+import sys
+
 import pandas as pd
 
+# Ensure we can import ab_framework when running directly from the repo
+REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+from ab_framework import ABTest
+
 # Load CTR data which has a significant effect
-df = pd.read_csv('verification/data/scenario3_ctr.csv')
+data_path = os.path.join(REPO_ROOT, 'data', 'scenario3_ctr.csv')
+df = pd.read_csv(data_path)
 
 # Create test at impression level
 test = ABTest(

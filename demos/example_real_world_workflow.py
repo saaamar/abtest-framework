@@ -15,13 +15,19 @@ Uses proper data schema with timestamps to calculate experiment duration
 Demonstrates ASYMMETRIC variant allocation for risk management
 """
 
+import os
 import sys
-sys.path.append('verification')
+from datetime import datetime, timedelta
+
+import numpy as np
+import pandas as pd
+
+# Ensure we can import ab_framework and verification when running from repo root
+REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
+if REPO_ROOT not in sys.path:
+  sys.path.insert(0, REPO_ROOT)
 
 from ab_framework import ABTest
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
 from verification.data_generator import generate_scenario7_ai_metric_with_gap
 
 def calculate_optimal_split(baseline_std, treatment_std_ratio=1.0, risk_tolerance='balanced'):
@@ -304,11 +310,11 @@ print(f"  - Significance Level: alpha = {alpha}")
 print(f"  - Monitoring: Check every {check_frequency_days} days")
 
 # Calculate required sample size using A/A test parameters
-  planning_test = ABTest(
+planning_test = ABTest(
     name="planning_only",
-    data=df.head(2).assign(variant=["A", "B"]),
-  )
-  sample_plan = planning_test.backend.sample_size_mean(
+    data=aa_df_7days.head(2).assign(variant=["A", "B"]),
+)
+sample_plan = planning_test.backend.sample_size_mean(
     baseline_mean=baseline_mean,
     baseline_std=baseline_std,
     mde=target_lift,

@@ -8,6 +8,14 @@ import numpy as np
 from scipy import stats
 from typing import Dict, Any
 import time
+from pathlib import Path
+
+
+DATA_DIR = Path(__file__).resolve().parents[1] / ".." / "data"
+
+def _load_csv(name: str) -> pd.DataFrame:
+    return pd.read_csv(DATA_DIR / name)
+
 
 def test_scenario1_scipy_baseline():
     """
@@ -23,7 +31,7 @@ def test_scenario1_scipy_baseline():
     start_time = time.time()
     
     # Load impression-level data
-    df = pd.read_csv("verification/data/scenario1_conversion.csv")
+    df = _load_csv("scenario1_conversion.csv")
     
     print(f"\nData: {len(df)} impressions from {df['user_id'].nunique()} users")
     
@@ -92,7 +100,7 @@ def test_scenario2_scipy_baseline():
     start_time = time.time()
     
     # Load session-level data
-    df = pd.read_csv("verification/data/scenario2_revenue.csv")
+    df = _load_csv("scenario2_revenue.csv")
     
     print(f"\nData: {len(df)} sessions from {df['user_id'].nunique()} active users")
     
@@ -168,7 +176,7 @@ def test_scenario3_scipy_baseline():
     start_time = time.time()
     
     # Load impression-level data
-    df = pd.read_csv("verification/data/scenario3_ctr.csv")
+    df = _load_csv("scenario3_ctr.csv")
     
     print(f"\nData: {len(df)} impressions from {df['user_id'].nunique()} users")
     
@@ -236,7 +244,7 @@ def test_scenario4_scipy_baseline():
     start_time = time.time()
     
     # Load session-level data
-    df = pd.read_csv("verification/data/scenario4_multi.csv")
+    df = _load_csv("scenario4_multi.csv")
     
     print(f"\nData: {len(df)} sessions from {df['user_id'].nunique()} users")
     
@@ -317,7 +325,7 @@ def test_scenario5_scipy_baseline():
     
     start_time = time.time()
     
-    df = pd.read_csv("verification/data/scenario5_resolved_with_gap.csv")
+    df = _load_csv("scenario5_resolved_with_gap.csv")
     
     print(f"\nData: {len(df)} sessions")
     
@@ -379,7 +387,7 @@ def test_scenario6_scipy_baseline():
     
     start_time = time.time()
     
-    df = pd.read_csv("verification/data/scenario6_resolved_no_gap.csv")
+    df = _load_csv("scenario6_resolved_no_gap.csv")
     
     print(f"\nData: {len(df)} sessions")
     
@@ -437,7 +445,7 @@ def test_scenario7_scipy_baseline():
     
     start_time = time.time()
     
-    df = pd.read_csv("verification/data/scenario7_ai_metric_with_gap.csv")
+    df = _load_csv("scenario7_ai_metric_with_gap.csv")
     
     print(f"\nData: {len(df)} sessions")
     
@@ -500,7 +508,7 @@ def test_scenario8_scipy_baseline():
     
     start_time = time.time()
     
-    df = pd.read_csv("verification/data/scenario8_ai_metric_no_gap.csv")
+    df = _load_csv("scenario8_ai_metric_no_gap.csv")
     
     print(f"\nData: {len(df)} sessions")
     

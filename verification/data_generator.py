@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Tuple
+import os
 
 # Set random seed for reproducibility
 RANDOM_SEED = 42
@@ -554,8 +555,14 @@ def generate_scenario8_ai_metric_no_gap(
         split=split
     )
 
-def generate_all_scenarios(output_dir: str = "verification/data"):
+def generate_all_scenarios(output_dir: str = None):
     """Generate all 8 scenarios and save to CSV files"""
+    if output_dir is None:
+        repo_root = os.path.dirname(os.path.dirname(__file__))
+        output_dir = os.path.join(repo_root, "data")
+
+    # Ensure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
     
     print("Generating synthetic A/B test data...")
     print(f"Random seed: {RANDOM_SEED}")

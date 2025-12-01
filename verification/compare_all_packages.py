@@ -1,16 +1,25 @@
-"""
-Compare All Packages Against Ground Truth
-Runs all package tests and compares results to scipy ground truth
-"""
+"""Compare all third-party A/B packages against scipy ground truth."""
 
-import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'tests'))
+import sys
+import pandas as pd
+import numpy as np
+
+REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
+DATA_DIR = os.path.join(REPO_ROOT, "data")
+
+# Ensure we can import the verification tests as modules
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "tests"))
 
 from ground_truth import (
-    scenario1_ground_truth, scenario2_ground_truth, scenario3_ground_truth, scenario4_ground_truth,
-    scenario5_ground_truth, scenario6_ground_truth, scenario7_ground_truth, scenario8_ground_truth
+    scenario1_ground_truth,
+    scenario2_ground_truth,
+    scenario3_ground_truth,
+    scenario4_ground_truth,
+    scenario5_ground_truth,
+    scenario6_ground_truth,
+    scenario7_ground_truth,
+    scenario8_ground_truth,
 )
 from test_scipy_baseline import (
     test_scenario1_scipy_baseline, test_scenario2_scipy_baseline, test_scenario3_scipy_baseline, test_scenario4_scipy_baseline,
@@ -97,29 +106,22 @@ def main():
     print("Comparing all packages against scipy ground truth")
     print("="*70)
     
-    # Save current directory and change to tests directory for test execution
-    original_dir = os.getcwd()
-    tests_dir = os.path.join(os.path.dirname(__file__), 'tests')
-    
-    # Get ground truths (runs from verification/ directory)
+    # Get ground truths (can run from repo root or verification/ directory)
     print("\n🔬 Computing ground truth...")
-    gt1 = scenario1_ground_truth("data/scenario1_conversion.csv")
-    gt2 = scenario2_ground_truth("data/scenario2_revenue.csv")
-    gt3 = scenario3_ground_truth("data/scenario3_ctr.csv")
-    gt4 = scenario4_ground_truth("data/scenario4_multi.csv")
-    gt5 = scenario5_ground_truth("data/scenario5_resolved_with_gap.csv")
-    gt6 = scenario6_ground_truth("data/scenario6_resolved_no_gap.csv")
-    gt7 = scenario7_ground_truth("data/scenario7_ai_metric_with_gap.csv")
-    gt8 = scenario8_ground_truth("data/scenario8_ai_metric_no_gap.csv")
+    gt1 = scenario1_ground_truth(DATA_DIR)
+    gt2 = scenario2_ground_truth(DATA_DIR)
+    gt3 = scenario3_ground_truth(DATA_DIR)
+    gt4 = scenario4_ground_truth(DATA_DIR)
+    gt5 = scenario5_ground_truth(DATA_DIR)
+    gt6 = scenario6_ground_truth(DATA_DIR)
+    gt7 = scenario7_ground_truth(DATA_DIR)
+    gt8 = scenario8_ground_truth(DATA_DIR)
     
     results = {
         'scipy_baseline': {},
         'abexp': {},
         'owl_ab_test': {}
     }
-    
-    # Change to tests directory for test execution (tests use ../data/ paths)
-    os.chdir(tests_dir)
     
     # Define metric info for conclusions
     metric_info_s1 = {'name': 'conversion rate', 'is_percentage': True}
@@ -170,9 +172,7 @@ def main():
         results['owl_ab_test']['s7'] = compare_results(gt7, test_scenario7_owl(), "owl", "Scenario 7", metric_info_s7)
         results['owl_ab_test']['s8'] = compare_results(gt8, test_scenario8_owl(), "owl", "Scenario 8", metric_info_s8)
     finally:
-        # Restore original directory
-        os.chdir(original_dir)
-    
+        pass
     # Summary
     print("\n\n" + "="*70)
     print("FINAL SUMMARY")

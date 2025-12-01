@@ -49,7 +49,7 @@ These scenarios demonstrate proper statistical methodology and professional repo
 
 ## Data Generation
 
-All scenarios use the same data generator with **seed = 42** to ensure reproducible results:
+All scenarios use the same data generator with **seed = 42** to ensure reproducible results. The generator lives in `verification/data_generator.py` and writes CSVs into the shared top-level `data/` folder:
 
 ```python
 # In data_generator.py
@@ -57,7 +57,7 @@ RANDOM_SEED = 42
 np.random.seed(RANDOM_SEED)
 ```
 
-**This means**: Deleting and regenerating data will produce identical results every time.
+**This means**: Deleting and regenerating data (into `data/`) will produce identical results every time.
 
 ## Running the Verification
 

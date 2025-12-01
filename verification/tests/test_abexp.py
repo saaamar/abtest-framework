@@ -11,8 +11,13 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Any
 import time
+import os
 
-def test_scenario1_abexp():
+
+DEFAULT_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data")
+
+
+def test_scenario1_abexp(data_dir: str = DEFAULT_DATA_DIR):
     """
     Scenario 1: Simple Conversion Rate Test using abexp
     
@@ -27,7 +32,7 @@ def test_scenario1_abexp():
     
     try:
         # Load impression-level data
-        df = pd.read_csv("verification/data/scenario1_conversion.csv")
+        df = pd.read_csv(os.path.join(data_dir, "scenario1_conversion.csv"))
         
         print(f"\nData: {len(df)} impressions from {df['user_id'].nunique()} users")
         
@@ -85,7 +90,7 @@ def test_scenario1_abexp():
             'reason': f'Error: {e}'
         }
 
-def test_scenario2_abexp():
+def test_scenario2_abexp(data_dir: str = DEFAULT_DATA_DIR):
     """
     Scenario 2: Revenue per Active User using abexp
     
@@ -100,7 +105,7 @@ def test_scenario2_abexp():
     
     try:
         # Load session-level data
-        df = pd.read_csv("verification/data/scenario2_revenue.csv")
+        df = pd.read_csv(os.path.join(data_dir, "scenario2_revenue.csv"))
         
         print(f"\nData: {len(df)} sessions from {df['user_id'].nunique()} active users")
         
@@ -162,7 +167,7 @@ def test_scenario2_abexp():
             'reason': f'Error: {e}'
         }
 
-def test_scenario3_abexp():
+def test_scenario3_abexp(data_dir: str = DEFAULT_DATA_DIR):
     """
     Scenario 3: CTR with Impression-Level Data using abexp
     
@@ -180,7 +185,7 @@ def test_scenario3_abexp():
     
     try:
         # Load impression-level data
-        df = pd.read_csv("verification/data/scenario3_ctr.csv")
+        df = pd.read_csv(os.path.join(data_dir, "scenario3_ctr.csv"))
         
         print(f"\nData: {len(df)} impressions from {df['user_id'].nunique()} users")
         print(f"Unit of randomization: User (variant assigned at user level)")
@@ -240,7 +245,7 @@ def test_scenario3_abexp():
             'reason': f'Error: {e}'
         }
 
-def test_scenario4_abexp():
+def test_scenario4_abexp(data_dir: str = DEFAULT_DATA_DIR):
     """
     Scenario 4: Multi-Metric Dashboard using abexp
     
@@ -254,7 +259,7 @@ def test_scenario4_abexp():
     
     try:
         # Load session-level data
-        df = pd.read_csv("verification/data/scenario4_multi.csv")
+        df = pd.read_csv(os.path.join(data_dir, "scenario4_multi.csv"))
         
         print(f"\nData: {len(df)} sessions from {df['user_id'].nunique()} users")
         
@@ -305,7 +310,7 @@ def test_scenario4_abexp():
             'reason': f'Error: {e}'
         }
 
-def test_scenario5_abexp():
+def test_scenario5_abexp(data_dir: str = DEFAULT_DATA_DIR):
     """
     Scenario 5: Agent Bot - Resolved Rate WITH gap
     Session-level binary metric (similar to scenario 1)
@@ -317,7 +322,7 @@ def test_scenario5_abexp():
     start_time = time.time()
     
     try:
-        df = pd.read_csv("verification/data/scenario5_resolved_with_gap.csv")
+        df = pd.read_csv(os.path.join(data_dir, "scenario5_resolved_with_gap.csv"))
         print(f"\nData: {len(df)} sessions")
         
         df_a = df[df['variant'] == 'A']
@@ -355,7 +360,7 @@ def test_scenario5_abexp():
         print(f"\n❌ ERROR: {e}")
         return {'scenario': 'Scenario 5', 'works': False, 'time': elapsed, 'reason': str(e)}
 
-def test_scenario6_abexp():
+def test_scenario6_abexp(data_dir: str = DEFAULT_DATA_DIR):
     """
     Scenario 6: Agent Bot - Resolved Rate NO gap
     Session-level binary metric
@@ -367,7 +372,7 @@ def test_scenario6_abexp():
     start_time = time.time()
     
     try:
-        df = pd.read_csv("verification/data/scenario6_resolved_no_gap.csv")
+        df = pd.read_csv(os.path.join(data_dir, "scenario6_resolved_no_gap.csv"))
         print(f"\nData: {len(df)} sessions")
         
         df_a = df[df['variant'] == 'A']
@@ -405,7 +410,7 @@ def test_scenario6_abexp():
         print(f"\n❌ ERROR: {e}")
         return {'scenario': 'Scenario 6', 'works': False, 'time': elapsed, 'reason': str(e)}
 
-def test_scenario7_abexp():
+def test_scenario7_abexp(data_dir: str = DEFAULT_DATA_DIR):
     """
     Scenario 7: Agent Bot - AI Quality Metric WITH gap
     Session-level continuous metric (similar to scenario 2)
@@ -417,7 +422,7 @@ def test_scenario7_abexp():
     start_time = time.time()
     
     try:
-        df = pd.read_csv("verification/data/scenario7_ai_metric_with_gap.csv")
+        df = pd.read_csv(os.path.join(data_dir, "scenario7_ai_metric_with_gap.csv"))
         print(f"\nData: {len(df)} sessions")
         
         df_a = df[df['variant'] == 'A']
@@ -455,7 +460,7 @@ def test_scenario7_abexp():
         print(f"\n❌ ERROR: {e}")
         return {'scenario': 'Scenario 7', 'works': False, 'time': elapsed, 'reason': str(e)}
 
-def test_scenario8_abexp():
+def test_scenario8_abexp(data_dir: str = DEFAULT_DATA_DIR):
     """
     Scenario 8: Agent Bot - AI Quality Metric NO gap
     Session-level continuous metric
@@ -467,7 +472,7 @@ def test_scenario8_abexp():
     start_time = time.time()
     
     try:
-        df = pd.read_csv("verification/data/scenario8_ai_metric_no_gap.csv")
+        df = pd.read_csv(os.path.join(data_dir, "scenario8_ai_metric_no_gap.csv"))
         print(f"\nData: {len(df)} sessions")
         
         df_a = df[df['variant'] == 'A']
@@ -505,7 +510,7 @@ def test_scenario8_abexp():
         print(f"\n❌ ERROR: {e}")
         return {'scenario': 'Scenario 8', 'works': False, 'time': elapsed, 'reason': str(e)}
 
-def run_all_abexp_tests():
+def run_all_abexp_tests(data_dir: str = DEFAULT_DATA_DIR):
     """Run all abexp tests and summarize"""
     print("\n" + "="*70)
     print("ABEXP PACKAGE EVALUATION")
@@ -513,14 +518,14 @@ def run_all_abexp_tests():
     print("="*70)
     
     results = []
-    results.append(test_scenario1_abexp())
-    results.append(test_scenario2_abexp())
-    results.append(test_scenario3_abexp())
-    results.append(test_scenario4_abexp())
-    results.append(test_scenario5_abexp())
-    results.append(test_scenario6_abexp())
-    results.append(test_scenario7_abexp())
-    results.append(test_scenario8_abexp())
+    results.append(test_scenario1_abexp(data_dir=data_dir))
+    results.append(test_scenario2_abexp(data_dir=data_dir))
+    results.append(test_scenario3_abexp(data_dir=data_dir))
+    results.append(test_scenario4_abexp(data_dir=data_dir))
+    results.append(test_scenario5_abexp(data_dir=data_dir))
+    results.append(test_scenario6_abexp(data_dir=data_dir))
+    results.append(test_scenario7_abexp(data_dir=data_dir))
+    results.append(test_scenario8_abexp(data_dir=data_dir))
     
     # Summary
     print("\n" + "="*70)

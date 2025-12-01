@@ -4,6 +4,13 @@ Example usage of the ab_framework package.
 This script demonstrates a complete A/B test analysis workflow using the framework.
 """
 
+import os
+import sys
+
+REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
 from ab_framework import ABTest, QualityChecker
 import pandas as pd
 
@@ -38,7 +45,7 @@ def main():
     print("\n### STEP 2: Load Experiment Data ###\n")
     
     # Using verification scenario 1 data as example
-    df = pd.read_csv('verification/data/scenario1_conversion.csv')
+    df = pd.read_csv('data/scenario1_conversion.csv')
     print(f"Loaded {len(df):,} observations")
     print(f"Columns: {list(df.columns)}")
     print(f"\nFirst few rows:")
@@ -118,7 +125,7 @@ def main():
     print("=" * 70 + "\n")
     
     # Load multi-metric data
-    df_multi = pd.read_csv('verification/data/scenario4_multi.csv')
+    df_multi = pd.read_csv('data/scenario4_multi.csv')
     
     test_multi = ABTest(
         name="checkout_optimization",

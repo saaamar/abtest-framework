@@ -11,17 +11,18 @@ Each test:
 """
 
 import time
-from pathlib import Path
 from typing import Dict, Any, List
 
 import numpy as np
 import pandas as pd
 
+from pathlib import Path
 from ab_framework.core import ABTest
 from verification import ground_truth
 
 
-DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DATA_DIR = REPO_ROOT / "data"
 
 
 def _load_csv(name: str) -> pd.DataFrame:
@@ -58,9 +59,6 @@ def test_scenario1_framework() -> Dict[str, Any]:
     print("p-value:", res["p_value"])
     print(f"⏱️  Time: {elapsed:.3f} seconds")
 
-    # Compare against scipy ground truth for sanity
-    gt = ground_truth.compute_scenario1()
-    print("\nGround truth p-value:", gt["p_value"])
 
     return {
         "scenario": "Scenario 1",
@@ -102,8 +100,6 @@ def test_scenario2_framework() -> Dict[str, Any]:
     print("p-value:", res["p_value"])
     print(f"⏱️  Time: {elapsed:.3f} seconds")
 
-    gt = ground_truth.compute_scenario2()
-    print("\nGround truth p-value:", gt["p_value"])
 
     return {
         "scenario": "Scenario 2",
@@ -160,8 +156,6 @@ def test_scenario3_framework() -> Dict[str, Any]:
     print("p-value:", res["p_value"])
     print(f"⏱️  Time: {elapsed:.3f} seconds")
 
-    gt = ground_truth.compute_scenario3()
-    print("\nGround truth p-value:", gt["p_value"])
 
     return {
         "scenario": "Scenario 3",

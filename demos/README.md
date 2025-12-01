@@ -7,7 +7,7 @@ This directory contains ready-to-run demonstration files showcasing the AB Frame
 
 ## 📁 Demo Files Overview
 
-### 1. Quick Start Demo (`demo_quick_start.txt`)
+### 1. Quick Start Demo (`demo_quickstart_basic_workflow.md`)
 **Purpose**: Introduction to basic framework usage  
 **Duration**: ~2 minutes to read  
 **Best for**: New users, quick overview
@@ -26,7 +26,7 @@ This directory contains ready-to-run demonstration files showcasing the AB Frame
 
 ---
 
-### 2. Real World Workflow Demo (`demo_real_world_workflow.txt`)
+### 2. Real World Workflow Demo (`demo_real_world_ai_model_rollout.md`)
 **Purpose**: End-to-end enterprise A/B testing pipeline  
 **Duration**: ~5 minutes to read  
 **Best for**: Understanding production workflows
@@ -46,74 +46,18 @@ This directory contains ready-to-run demonstration files showcasing the AB Frame
 
 ---
 
-### 3. Feature Showcase Demo (`demo_features.md`)
-**Purpose**: Comprehensive feature demonstration  
-**Duration**: ~10 minutes to read  
-**Best for**: Technical evaluation, feature comparison
+### 3. Significant CTR Uplift Demo (`demo_significant_ctr_uplift.md`)
+**Purpose**: Show a clear, statistically significant win  
+**Duration**: ~1 minute to read  
+**Best for**: Seeing what a “ship it” result looks like
 
 **Contents**:
+- Impression-level click-through rate test
+- Control vs. treatment CTR
+- Statistically significant uplift with clear CI
+- Plain-English interpretation and ship recommendation
 
-#### Feature 1: Sample Size Planning
-- Conversion rates (proportions)
-- Continuous metrics (means)
-- Power analysis
-
-#### Feature 2: Multiple Testing Corrections
-- No correction (baseline)
-- Bonferroni correction (conservative)
-- Benjamini-Hochberg FDR (balanced)
-
-#### Feature 3: Quality Checks
-- Sample Ratio Mismatch (SRM) detection
-- Minimum Detectable Effect (MDE) calculation
-
-#### Feature 4: Sequential Testing
-- Peek at results without inflating error rates
-- Early stopping rules
-- Monitoring at different sample sizes
-
-#### Feature 5: Flexible Metric Definitions
-- Session-level metrics
-- User-level metrics
-- Conditional metrics (e.g., Average Order Value)
-
-#### Feature 6: Result Export Options
-- DataFrame export for analysis
-- Dictionary export for APIs/JSON
-- Plain English conclusions
-
-#### Feature 7: Confidence Intervals
-- Precision estimates
-- 95% CI for all metrics
-- Effect size uncertainty
-
-**Key Takeaway**: Professional-grade features for rigorous experimentation
-
----
-
-### 4. Verification Results Demo (`demo_verification.txt`)
-**Purpose**: Framework validation against other libraries  
-**Duration**: ~3 minutes to read  
-**Best for**: Trust building, accuracy validation
-
-**Contents**:
-- Comparison with scipy (baseline)
-- Comparison with py-ab-testing
-- Comparison with abexp
-- Multiple test scenarios
-- Agreement analysis
-
-**Scenarios Tested**:
-1. Basic conversion rate test
-2. Revenue per user (continuous metric)
-3. Click-through rate
-4. Multi-metric analysis
-5. Resolved metric with gap
-6. Resolved metric without gap
-7. AI metric with gap
-8. AI metric without gap
-
-**Key Takeaway**: Our framework produces identical results to established libraries
+**Key Takeaway**: What a strong, statistically significant result and conclusion looks like
 
 ---
 
@@ -122,31 +66,25 @@ This directory contains ready-to-run demonstration files showcasing the AB Frame
 ### For Presentations
 ```bash
 # Quick 2-minute overview
-type demos\demo_quick_start.txt
+type demos\demo_quickstart_basic_workflow.md
 
 # Full 5-minute walkthrough
-type demos\demo_real_world_workflow.txt
-```
+type demos\demo_real_world_ai_model_rollout.md
 
-### For Technical Review
-```bash
-# Browse features interactively
-code demos\demo_features.md
-
-# Verify accuracy
-type demos\demo_verification.txt
+# One-slide uplift story
+type demos\demo_significant_ctr_uplift.md
 ```
 
 ### Run Live Python Demos
 ```bash
 # Quick start (basic workflow)
-python demos\example_usage.py
+python demos\demo_quickstart_basic_workflow.py
 
-# Real world workflow
-python demos\example_real_world_workflow.py
+# Real world AI model rollout
+python demos\demo_real_world_ai_model_rollout.py
 
-# Significant-result example
-python demos\example_significant_result.py
+# Significant-result CTR example
+python demos\demo_significant_ctr_uplift.py
 ```
 
 ---
@@ -155,29 +93,22 @@ python demos\example_significant_result.py
 
 | Demo | Length | Technical Level | Best For |
 |------|--------|-----------------|----------|
-| Quick Start | Short (~150 lines) | Beginner | First-time users |
-| Real World | Medium (~300 lines) | Intermediate | Understanding workflows |
-| Features | Long (~500 lines) | Advanced | Technical evaluation |
-| Verification | Medium (~200 lines) | Advanced | Trust building |
+| Quick Start (basic workflow) | Short (~150 lines) | Beginner | First-time users |
+| Real World AI model rollout | Medium (~300 lines) | Intermediate | Understanding production workflows |
+| Significant CTR uplift | Very short | Beginner | Seeing a clear win example |
 
 ---
 
 ## 💡 Demo Selection Guide
 
-**"I'm new to A/B testing"**
-→ Start with `demo_quick_start.txt`
+**"I'm new to A/B testing"**  
+→ Start with `demo_quickstart_basic_workflow.md`
 
-**"I need to implement A/B testing at my company"**
-→ Review `demo_real_world_workflow.txt`
+**"I need to implement A/B testing at my company"**  
+→ Review `demo_real_world_ai_model_rollout.md`
 
-**"I'm evaluating different A/B testing frameworks"**
-→ Study `demo_features.md` and `demo_verification.txt`
-
-**"I want to see if this framework is accurate"**
-→ Check `demo_verification.txt`
-
-**"I need to present this to stakeholders"**
-→ Use `demo_quick_start.txt` for overview, `demo_real_world_workflow.txt` for details
+**"I want to see what a clear win looks like"**  
+→ Skim `demo_significant_ctr_uplift.md`
 
 ---
 
@@ -213,33 +144,27 @@ python demos\example_significant_result.py
 
 ## 📝 Output Format Details
 
-### Text Files (.txt)
-- Raw console output
-- Easy to read in any text editor
-- Good for quick review
-- Files: `demo_quick_start.txt`, `demo_real_world_workflow.txt`, `demo_verification.txt`
-
 ### Markdown Files (.md)
 - Formatted for better readability
 - Can be viewed in VSCode with preview
 - Better for detailed technical content
-- Files: `demo_features.md`, `README.md` (this file)
+- Files: `demo_quickstart_basic_workflow.md`, `demo_real_world_ai_model_rollout.md`, `demo_significant_ctr_uplift.md`, `README.md` (this file)
 
 ---
 
 ## 🔄 Updating Demos
 
-If you modify the framework or example scripts, you can optionally refresh the text/markdown outputs used in presentations:
+If you modify the framework or example scripts, you can optionally refresh the markdown outputs used in presentations:
 
 ```bash
-# Refresh quick-start text demo
-python demos\example_usage.py > demos\demo_quick_start.txt 2>&1
+# Refresh quick-start workflow demo
+python demos\demo_quickstart_basic_workflow.py > demos\demo_quickstart_basic_workflow.md 2>&1
 
-# Refresh real-world workflow text demo
-python demos\example_real_world_workflow.py > demos\demo_real_world_workflow.txt 2>&1
+# Refresh real-world AI model rollout demo
+python demos\demo_real_world_ai_model_rollout.py > demos\demo_real_world_ai_model_rollout.md 2>&1
 
-# Verification results can be regenerated by re-running the verification pipeline
-python run_comparison_all.py > demos\demo_verification.txt 2>&1
+# Refresh significant CTR uplift demo
+python demos\demo_significant_ctr_uplift.py > demos\demo_significant_ctr_uplift.md 2>&1
 ```
 
 ---

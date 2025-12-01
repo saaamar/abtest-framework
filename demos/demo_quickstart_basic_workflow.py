@@ -6,13 +6,15 @@ This script demonstrates a complete A/B test analysis workflow using the framewo
 
 import os
 import sys
+import pandas as pd
+
+"""Quick-start demo: basic A/B test workflow."""
 
 REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from ab_framework import ABTest, QualityChecker
-import pandas as pd
 
 def main():
     print("=" * 70)

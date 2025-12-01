@@ -46,7 +46,7 @@ test = ABTest(
     unit_id='user_id'
 )
 
-@test.metric
+@test.metric(metric_type="proportion")
 def conversion_rate(data):
     return data.groupby('user_id')['converted'].max()
 

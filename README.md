@@ -140,7 +140,7 @@ All formulas, variance definitions, sample‑size equations, and clustered stand
 
 ## 3. 📊 Sample Size Determination: The Foundation
 
-This framework provides the `SampleSizeCalculator` class to turn your **statistical choices** into concrete **sample sizes and durations**.
+This framework exposes **sample-size planning** via the statistical backend interface (`StatisticalBackend`). In practice, you call backend helper methods like `sample_size_proportion` and `sample_size_mean` to turn your **statistical choices** into concrete **sample sizes and durations**.
 
 At configuration time you typically provide:
 
@@ -169,7 +169,7 @@ Choose α and power → Define meaningful business impact → Translate to MDE �
 Choose metric and baseline → Compute required sample size → Map to duration via traffic
 ```
 
-In code, this looks like configuring parameters and then calling helpers in this framework. For example:
+In code, this looks like configuring parameters and then calling backend helpers from an `ABTest` instance. For example:
 ```python
 # Step 1: Choose statistical parameters
 alpha = 0.05          # 5% false positive rate
@@ -185,13 +185,18 @@ traffic_allocation = {"control": 0.50, "treatment": 0.50}  # 50/50 split
 experiment_traffic_pct = sum(traffic_allocation.values())  # 1.0 = 100% of users
 
 # Step 4: Calculate required sample size per variant (control/treatment)
-from ab_framework import SampleSizeCalculator
+from ab_framework import ABTest
 
-calc = SampleSizeCalculator()
-result = calc.for_proportion(
+planning_test = ABTest(
+    name="planning_only",
+    data=pd.DataFrame({"user_id": [1, 2], "variant": ["A", "B"]}),
+)
+
+result = planning_test.backend.sample_size_proportion(
     baseline_rate=baseline_rate,
+    mde=mde,
     alpha=alpha,
-    power=power
+    power=power,
 )
 
 total_sample_size = result['total_size']
@@ -211,15 +216,23 @@ For more on planning theory, see:
 
 *`AB_TESTING_THEORY.md` – Section 4, “Sample Size Determination and Experiment Planning (high level)”.*
 
-**Example Scenarios (framework usage):**
+**Example Scenarios (framework usage with backend helpers):**
 ```python
 import math
-from ab_framework import SampleSizeCalculator
+from ab_framework import ABTest
 
-calc = SampleSizeCalculator()
+planning_test = ABTest(
+    name="planning_only",
+    data=pd.DataFrame({"user_id": [1, 2], "variant": ["A", "B"]}),
+)
 
-# Get required sample size
-result = calc.for_proportion(baseline_rate=0.10, mde=0.05, power=0.80, alpha=0.05)
+# Get required sample size for a proportion metric
+result = planning_test.backend.sample_size_proportion(
+    baseline_rate=0.10,
+    mde=0.05,
+    power=0.80,
+    alpha=0.05,
+)
 required_sample_size = result['total_size']
 
 # Scenario 1: High traffic site, full allocation

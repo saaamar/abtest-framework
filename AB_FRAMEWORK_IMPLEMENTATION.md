@@ -30,7 +30,7 @@ A complete A/B testing framework with the following components:
    - `OwlBackend` - Implementation using `owl_ab_test` package
    - Clean separation between orchestration and statistical computation
 
-3. **Sample Size Calculator** (`sample_size.py`)
+3. **Sample Size Planning via Backend** (`backends/base.py`, `backends/owl_backend.py`)
    - Pre-experiment power analysis
    - Support for proportion metrics (conversion, CTR)
    - Support for continuous metrics (revenue, time)
@@ -116,7 +116,7 @@ All verification scenarios pass successfully:
   - revenue_per_user: p=0.038 (not significant after correction)
 
 ### Additional Features Verified ✅
-- **Sample Size Calculator:** Correctly computes required samples for both proportion and continuous metrics
+- **Sample Size Planning:** Backend implementations correctly compute required samples for both proportion and continuous metrics via `sample_size_proportion` and `sample_size_mean`.
 - **SRM Detection:** Successfully detects imbalanced splits (10523 vs 9477 triggers warning)
 
 ## Architectural Decisions
@@ -277,7 +277,7 @@ ab_framework/
 │   ├── __init__.py
 │   ├── base.py                   # StatisticalBackend interface
 │   └── owl_backend.py            # OwlBackend implementation
-├── sample_size.py                 # SampleSizeCalculator
+├── sample_size.py                 # Legacy module (now raises a RuntimeError; planning lives on StatisticalBackend)
 ├── quality.py                     # QualityChecker (SRM, data quality)
 └── tests/
     └── test_framework.py          # Verification tests

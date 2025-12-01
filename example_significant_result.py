@@ -19,7 +19,7 @@ test = ABTest(
 )
 
 # Define metric
-@test.metric
+@test.metric(metric_type="proportion")
 def click_through_rate(data):
     """CTR at impression level."""
     return data.set_index('impression_id')['clicked']

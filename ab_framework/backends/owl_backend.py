@@ -4,6 +4,7 @@ from typing import Dict, Any
 import numpy as np
 from owl_ab_test import calculate_proportion_stats, calculate_revenue_stats
 from .base import StatisticalBackend
+from scipy import stats
 
 
 class OwlBackend(StatisticalBackend):
@@ -111,4 +112,95 @@ class OwlBackend(StatisticalBackend):
             'control_n': n_a,
             'treatment_n': n_b,
             'backend': 'owl_ab_test'
+        }
+
+    def sample_size_proportion(
+        self,
+        baseline_rate: float,
+        mde: float,
+        alpha: float = 0.05,
+        power: float = 0.80,
+        ratio: float = 1.0,
+    ) -> Dict[str, Any]:
+        """Sample size planning for proportion metrics using normal approximation.
+
+            This uses the same closed-form normal-approximation formula described
+            in the theory documentation for proportion metrics so that existing
+            theoretical documentation remains accurate.
+        """
+        treatment_rate = baseline_rate * (1 + mde)
+        pooled_rate = (baseline_rate + treatment_rate) / 2
+        pooled_variance = pooled_rate * (1 - pooled_rate)
+
+        z_alpha = stats.norm.ppf(1 - alpha / 2)
+        z_beta = stats.norm.ppf(power)
+
+        n_control = (
+            (z_alpha + z_beta) ** 2 * pooled_variance * (1 + 1 / ratio)
+            / (treatment_rate - baseline_rate) ** 2
+        )
+
+        n_control = int(np.ceil(n_control))
+        n_treatment = int(np.ceil(n_control * ratio))
+
+        return {
+            'control_size': n_control,
+            'treatment_size': n_treatment,
+            'total_size': n_control + n_treatment,
+            'assumptions': {
+                'baseline_rate': baseline_rate,
+                'treatment_rate': treatment_rate,
+                'mde_relative': mde,
+                'mde_absolute': treatment_rate - baseline_rate,
+                'alpha': alpha,
+                'power': power,
+                'ratio': ratio,
+                'pooled_rate': pooled_rate,
+            },
+            'backend': 'owl_ab_test',
+        }
+
+    def sample_size_mean(
+        self,
+        baseline_mean: float,
+        baseline_std: float,
+        mde: float,
+        alpha: float = 0.05,
+        power: float = 0.80,
+        ratio: float = 1.0,
+    ) -> Dict[str, Any]:
+        """Sample size planning for continuous metrics using normal approximation.
+
+            This mirrors the normal-approximation formula described in the
+            theory documentation for continuous metrics.
+        """
+        treatment_mean = baseline_mean * (1 + mde)
+        effect_size = abs(treatment_mean - baseline_mean) / baseline_std
+
+        z_alpha = stats.norm.ppf(1 - alpha / 2)
+        z_beta = stats.norm.ppf(power)
+
+        n_control = int(
+            np.ceil(
+                2 * (z_alpha + z_beta) ** 2 / effect_size ** 2 * (1 + 1 / ratio)
+            )
+        )
+        n_treatment = int(np.ceil(n_control * ratio))
+
+        return {
+            'control_size': n_control,
+            'treatment_size': n_treatment,
+            'total_size': n_control + n_treatment,
+            'assumptions': {
+                'baseline_mean': baseline_mean,
+                'baseline_std': baseline_std,
+                'treatment_mean': treatment_mean,
+                'effect_size_cohen_d': effect_size,
+                'mde_relative': mde,
+                'mde_absolute': treatment_mean - baseline_mean,
+                'alpha': alpha,
+                'power': power,
+                'ratio': ratio,
+            },
+            'backend': 'owl_ab_test',
         }

@@ -18,7 +18,7 @@ Demonstrates ASYMMETRIC variant allocation for risk management
 import sys
 sys.path.append('verification')
 
-from ab_framework import ABTest, SampleSizeCalculator
+from ab_framework import ABTest
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -130,7 +130,7 @@ def run_analysis_check(data, check_number, days_elapsed, target_lift, phase_name
         unit_id="conversation_id"
     )
     
-    @test.metric
+    @test.metric(metric_type="mean")
     def ai_metric(data):
         """AI quality metric (0-5 continuous scale) - averaged per conversation."""
         return data.groupby('conversation_id')['ai_metric'].mean()
@@ -304,8 +304,11 @@ print(f"  - Significance Level: alpha = {alpha}")
 print(f"  - Monitoring: Check every {check_frequency_days} days")
 
 # Calculate required sample size using A/A test parameters
-calc = SampleSizeCalculator()
-sample_plan = calc.for_mean(
+  planning_test = ABTest(
+    name="planning_only",
+    data=df.head(2).assign(variant=["A", "B"]),
+  )
+  sample_plan = planning_test.backend.sample_size_mean(
     baseline_mean=baseline_mean,
     baseline_std=baseline_std,
     mde=target_lift,
@@ -507,7 +510,7 @@ test_final = ABTest(
     unit_id="conversation_id"
 )
 
-@test_final.metric
+@test_final.metric(metric_type="mean")
 def ai_metric(data):
     """AI quality metric (0-5 continuous scale) - averaged per conversation."""
     return data.groupby('conversation_id')['ai_metric'].mean()

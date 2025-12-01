@@ -3,7 +3,7 @@ Feature Showcase Demo - AB Framework
 Demonstrates all key features with clear examples
 """
 
-from ab_framework import ABTest, SampleSizeCalculator, QualityChecker
+from ab_framework import ABTest, QualityChecker
 import pandas as pd
 import numpy as np
 
@@ -19,7 +19,10 @@ print("\n" + "=" * 80)
 print("FEATURE 1: SAMPLE SIZE PLANNING")
 print("=" * 80)
 
-calc = SampleSizeCalculator()
+planning_test = ABTest(
+    name="planning_only",
+    data=df.head(2).assign(variant=["A", "B"]),
+)
 
 print("\n### 1A: Sample Size for Conversion Rate (Proportions)")
 print("-" * 80)

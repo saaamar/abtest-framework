@@ -11,7 +11,7 @@ A production-ready A/B testing **orchestration and standardization layer** with 
 ✅ **Automatic metric type detection** - Binary (conversion) vs continuous (revenue) metrics  
 ✅ **Multi-metric orchestration** - Bonferroni and FDR correction for multiple testing  
 ✅ **SRM (Sample Ratio Mismatch) detection** - Automatic data quality checks  
-✅ **Sample size calculation** - Pre-experiment power analysis  
+✅ **Sample size calculation** - Pre-experiment power analysis via backend helper methods  
 ✅ **Flexible data sources** - Works with pandas DataFrames from any source  
 ✅ **Pluggable statistical backends** - Currently uses `owl_ab_test`, easily extensible (e.g., `scipy`)  
 ✅ **Rich reporting** - Markdown summaries, DataFrames, JSON exports
@@ -433,16 +433,20 @@ DO NOT PROCEED until fixed!
 baseline_mean = aa_results.metric_results['key_metric']['control_value']
 baseline_std = aa_results.metric_results['key_metric']['std_pooled']
 
-# Use for sample size calculation
-from ab_framework import SampleSizeCalculator
-calc = SampleSizeCalculator()
+from ab_framework import ABTest
+import pandas as pd
 
-sample_plan = calc.for_mean(
+planning_test = ABTest(
+    name="planning_only",
+    data=pd.DataFrame({"user_id": [1, 2], "variant": ["A", "B"]}),
+)
+
+sample_plan = planning_test.backend.sample_size_mean(
     baseline_mean=baseline_mean,  # From A/A test (more accurate!)
-    baseline_std=baseline_std,     # From A/A test (more accurate!)
-    mde=0.07,  # Business requirement
+    baseline_std=baseline_std,    # From A/A test (more accurate!)
+    mde=0.07,                     # Business requirement
     alpha=0.05,
-    power=0.80
+    power=0.80,
 )
 
 print(f"Need {sample_plan['total_size']:,} users for A/B test")
@@ -458,27 +462,30 @@ print(f"Need {sample_plan['total_size']:,} users for A/B test")
 ### Pre-Experiment: Sample Size Calculation
 
 ```python
-from ab_framework import SampleSizeCalculator
+from ab_framework import ABTest
 
-calc = SampleSizeCalculator()
+planning_test = ABTest(
+    name="planning_only",
+    data=pd.DataFrame({"user_id": [1, 2], "variant": ["A", "B"]}),
+)
 
 # For conversion rates
-result = calc.for_proportion(
+result = planning_test.backend.sample_size_proportion(
     baseline_rate=0.10,  # Current 10% conversion
     mde=0.05,            # Want to detect 5% relative lift
     alpha=0.05,
-    power=0.80
+    power=0.80,
 )
 print(f"Need {result['total_size']:,} users")
 # Output: Need 115,528 users
 
 # For continuous metrics (revenue, time, etc.)
-result = calc.for_mean(
+result = planning_test.backend.sample_size_mean(
     baseline_mean=50.0,    # $50 average
     baseline_std=25.0,     # $25 std dev
     mde=0.10,              # Detect 10% lift
     alpha=0.05,
-    power=0.80
+    power=0.80,
 )
 print(f"Need {result['total_size']:,} users")
 # Output: Need 1,570 users
@@ -651,7 +658,7 @@ ab_framework/
 ├── backends/
 │   ├── base.py          # StatisticalBackend interface
 │   └── owl_backend.py   # OwlBackend implementation
-├── sample_size.py        # SampleSizeCalculator
+├── sample_size.py        # Legacy sample size module (use backend helpers)
 ├── quality.py            # QualityChecker (SRM, data quality)
 └── tests/
     └── test_framework.py # Verification tests
@@ -697,7 +704,7 @@ Tests verify:
 - ✅ Revenue per active user (continuous + filtering)
 - ✅ Click-through rate (event-level)
 - ✅ Multi-metric with Bonferroni correction
-- ✅ Sample size calculator
+- ✅ Sample size planning via backend helpers
 - ✅ SRM detection
 
 ## Comparison to Alternatives

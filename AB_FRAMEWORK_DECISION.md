@@ -824,7 +824,7 @@ results.export('experiment_results.json')
             },
             'effect': {
                 'absolute': 9.51,
-                'relative': 0.195,
+            - **Sample size planning via backend methods** (no standalone calculator class)
                 'cohens_d': 0.476,
                 'ci_95': [6.18, 12.85]
             }

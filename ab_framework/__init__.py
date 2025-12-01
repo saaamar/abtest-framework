@@ -26,13 +26,11 @@ __version__ = "0.1.0"
 
 from .core import ABTest
 from .backends import OwlBackend, StatisticalBackend
-from .sample_size import SampleSizeCalculator
 from .quality import QualityChecker
 
 __all__ = [
     'ABTest',
     'OwlBackend',
     'StatisticalBackend',
-    'SampleSizeCalculator',
     'QualityChecker',
 ]

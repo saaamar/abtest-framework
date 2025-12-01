@@ -4,7 +4,7 @@ Example usage of the ab_framework package.
 This script demonstrates a complete A/B test analysis workflow using the framework.
 """
 
-from ab_framework import ABTest, SampleSizeCalculator, QualityChecker
+from ab_framework import ABTest, QualityChecker
 import pandas as pd
 
 def main():
@@ -17,8 +17,10 @@ def main():
     # =========================================================================
     print("\n### STEP 1: Sample Size Calculation ###\n")
     
-    calc = SampleSizeCalculator()
-    sample_size = calc.for_proportion(
+    sample_size = ABTest(
+        name="planning_only",
+        data=pd.DataFrame({"user_id": [1, 2], "variant": ["A", "B"]}),
+    ).backend.sample_size_proportion(
         baseline_rate=0.10,  # Current 10% conversion rate
         mde=0.05,            # Want to detect 5% relative improvement
         power=0.80,          # 80% power
@@ -62,7 +64,7 @@ def main():
     # =========================================================================
     print("\n### STEP 4: Define Metrics ###\n")
     
-    @test.metric
+    @test.metric(metric_type="proportion")
     def conversion_rate(data):
         """User-level conversion rate (% of users who converted)."""
         return data.groupby('user_id')['converted'].max()
@@ -125,15 +127,15 @@ def main():
         unit_id="user_id"
     )
     
-    @test_multi.metric
+    @test_multi.metric(metric_type="proportion")
     def conversion_rate(data):
         return data.groupby('user_id')['converted_this_session'].max()
     
-    @test_multi.metric
+    @test_multi.metric(metric_type="mean")
     def revenue_per_user(data):
         return data.groupby('user_id')['order_value'].sum()
     
-    @test_multi.metric
+    @test_multi.metric(metric_type="mean")
     def avg_order_value(data):
         converters = data[data['converted_this_session'] == 1]
         if len(converters) == 0:

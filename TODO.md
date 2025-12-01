@@ -5,10 +5,10 @@ Status as of November 30, 2025
 ## ✅ Completed Items (3.5/6)
 
 ### A. API Surface - DONE ✅
-- **Status:** Fully implemented
+- **Status:** Fully implemented (sample-size planning is handled via backend helpers)
 - **Location:** `ab_framework/__init__.py`
 - **Details:**
-  - Clean public API exports: `ABTest`, `SampleSizeCalculator`, `QualityChecker`
+  - Clean public API exports: `ABTest`, `QualityChecker` (sample-size planning is available via backend methods on `StatisticalBackend`)
   - Backends kept mostly internal
 - **Minor improvement:**
   - Consider removing `OwlBackend` and `StatisticalBackend` from `__all__` to keep them fully internal
@@ -194,7 +194,7 @@ docs/
 │   ├── ABTest.md                      # ABTest API reference
 │   ├── ExperimentResults.md           # Results object documentation
 │   ├── QualityChecker.md              # SRM and quality checks
-│   └── SampleSizeCalculator.md        # Power analysis and planning
+│   └── SampleSizePlanning.md         # Power analysis and planning via backend helpers
 ├── examples/
 │   ├── 01_simple_conversion.md        # Basic binary metric test
 │   ├── 02_revenue_per_user.md         # Continuous metric with filtering
@@ -333,7 +333,7 @@ The framework is "production interface ready" when:
 - ✅ Clean, intuitive API (`@test.metric` decorator is excellent)
 - ✅ Multi-metric + correction handling (unique value vs owl/abexp)
 - ✅ SRM checks built-in (rarely found in AB packages)
-- ✅ Sample size calculator integrated
+- ✅ Sample size planning integrated via backend helpers (no standalone calculator class)
 - ✅ Backend-agnostic design
 - ✅ Strong verification suite
 

@@ -42,7 +42,7 @@ def test_scenario1_framework() -> Dict[str, Any]:
     # ABTest expects data with unit_id + variant; metrics return Series indexed by unit
     test = ABTest(name="scenario1", data=df, variant_col="variant", unit_id="user_id")
 
-    @test.metric
+    @test.metric(metric_type="proportion")
     def conversion_rate(data: pd.DataFrame) -> pd.Series:
         # 1 if user converted in any impression
         return data.groupby("user_id")["converted"].max()
@@ -86,7 +86,7 @@ def test_scenario2_framework() -> Dict[str, Any]:
 
     test = ABTest(name="scenario2", data=df, variant_col="variant", unit_id="user_id")
 
-    @test.metric
+    @test.metric(metric_type="mean")
     def revenue_per_user(data: pd.DataFrame) -> pd.Series:
         # Sum session revenue per user (all users are active)
         return data.groupby("user_id")["session_revenue"].sum()
@@ -129,7 +129,7 @@ def test_scenario3_framework() -> Dict[str, Any]:
 
     test = ABTest(name="scenario3", data=df, variant_col="variant", unit_id="user_id")
 
-    @test.metric
+    @test.metric(metric_type="proportion")
     def ctr_impression(data: pd.DataFrame) -> pd.Series:
         # Each impression is a trial; CTR per impression is just clicked (0/1)
         # We aggregate to user-level mean CTR if we want user-centric; here we
@@ -147,7 +147,7 @@ def test_scenario3_framework() -> Dict[str, Any]:
         variant_col="variant",
         unit_id="impression_id",
     )
-    test_ctr.register_metric("ctr_impression", ctr_impression)
+    test_ctr.register_metric("ctr_impression", ctr_impression, metric_type="proportion")
 
     results = test_ctr.analyze(metrics=["ctr_impression"], variants=["A", "B"])
     res = list(results.metric_results.values())[0]
@@ -187,15 +187,15 @@ def test_scenario4_framework() -> Dict[str, Any]:
 
     test = ABTest(name="scenario4", data=df, variant_col="variant", unit_id="user_id")
 
-    @test.metric
+    @test.metric(metric_type="proportion")
     def converted_any(data: pd.DataFrame) -> pd.Series:
         return data.groupby("user_id")["converted_this_session"].max()
 
-    @test.metric
+    @test.metric(metric_type="mean")
     def total_order_value(data: pd.DataFrame) -> pd.Series:
         return data.groupby("user_id")["order_value"].sum()
 
-    @test.metric
+    @test.metric(metric_type="mean")
     def total_revenue(data: pd.DataFrame) -> pd.Series:
         return data.groupby("user_id")["session_revenue"].sum()
 
@@ -241,7 +241,7 @@ def _binary_scenario(name: str, csv: str, value_col: str) -> Dict[str, Any]:
 
     test = ABTest(name=name, data=df, variant_col="variant", unit_id="user_id")
 
-    @test.metric
+    @test.metric(metric_type="proportion")
     def binary_metric(data: pd.DataFrame) -> pd.Series:
         # Aggregate per user as mean of the binary flag across sessions
         return data.groupby("user_id")[value_col].mean()
@@ -279,7 +279,7 @@ def _continuous_scenario(name: str, csv: str, value_col: str) -> Dict[str, Any]:
 
     test = ABTest(name=name, data=df, variant_col="variant", unit_id="user_id")
 
-    @test.metric
+    @test.metric(metric_type="mean")
     def metric_value(data: pd.DataFrame) -> pd.Series:
         return data.groupby("user_id")[value_col].mean()
 

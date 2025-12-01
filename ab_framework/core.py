@@ -62,8 +62,8 @@ class ABTest:
         self.alpha = alpha
         self.timestamp = datetime.now().isoformat()
         
-        # Metric registry
-        self._metrics: Dict[str, Callable] = {}
+        # Metric registry: name -> {"func": callable, "metric_type": str}
+        self._metrics: Dict[str, Dict[str, Any]] = {}
         
         # Validate inputs
         self._validate_data()
@@ -80,31 +80,40 @@ class ABTest:
         if len(variants) < 2:
             raise ValueError(f"Need at least 2 variants, found {len(variants)}")
     
-    def metric(self, func: Callable) -> Callable:
+    def metric(self, func: Callable = None, *, metric_type: str) -> Callable:
         """Decorator to register a metric function.
         
         The metric function should take a DataFrame and return a pandas Series
         indexed by unit_id with the metric value for each unit.
-        
+
         Args:
-            func: Metric function that takes DataFrame and returns Series
+            func: Metric function that takes DataFrame and returns Series.
+                When omitted (i.e. using ``@test.metric(metric_type="proportion")``),
+                the decorator will return a configured wrapper.
+            metric_type: Required hint for how this metric should be analyzed.
+                Supported values:
+
+                - ``"proportion"``: binary proportion metric (0/1), analyzed via
+                  :meth:`StatisticalBackend.proportion_z_test`.
+                - ``"mean"``: continuous metric, analyzed via
+                  :meth:`StatisticalBackend.mean_t_test`.
         
         Returns:
-            The original function (unchanged)
-        
-        Example:
-            >>> @test.metric
-            ... def conversion_rate(data):
-            ...     return data.groupby('user_id')['converted'].max()
-            >>> 
-            >>> @test.metric
-            ... def revenue_per_user(data):
-            ...     return data.groupby('user_id')['revenue'].sum()
+            The original function (unchanged).
         """
-        self._metrics[func.__name__] = func
-        return func
+
+        def decorator(f: Callable) -> Callable:
+            if metric_type not in ("proportion", "mean"):
+                raise ValueError("metric_type must be 'proportion' or 'mean'")
+            self._metrics[f.__name__] = {"func": f, "metric_type": metric_type}
+            return f
+
+        # Support both @test.metric and @test.metric(...)
+        if func is not None:
+            return decorator(func)
+        return decorator
     
-    def register_metric(self, name: str, func: Callable):
+    def register_metric(self, name: str, func: Callable, metric_type: str):
         """Register a metric function programmatically.
         
         Alternative to the @metric decorator for dynamic registration.
@@ -112,8 +121,11 @@ class ABTest:
         Args:
             name: Metric name
             func: Metric function that takes DataFrame and returns Series
+            metric_type: Type hint ("proportion" or "mean").
         """
-        self._metrics[name] = func
+        if metric_type not in ("proportion", "mean"):
+            raise ValueError("metric_type must be 'proportion' or 'mean'")
+        self._metrics[name] = {"func": func, "metric_type": metric_type}
     
     def _compute_metric(self, metric_name: str) -> pd.DataFrame:
         """Compute metric values for all units.
@@ -126,8 +138,8 @@ class ABTest:
         """
         if metric_name not in self._metrics:
             raise ValueError(f"Metric '{metric_name}' not registered")
-        
-        metric_func = self._metrics[metric_name]
+        entry = self._metrics[metric_name]
+        metric_func = entry["func"]
         
         # Apply metric function
         metric_values = metric_func(self.data)
@@ -171,11 +183,16 @@ class ABTest:
         if len(data_a) == 0 or len(data_b) == 0:
             raise ValueError(f"No data for one or both variants: {variant_a}={len(data_a)}, {variant_b}={len(data_b)}")
         
-        # Detect metric type (binary vs continuous)
-        unique_values = np.unique(np.concatenate([data_a, data_b]))
-        is_binary = len(unique_values) == 2 and set(unique_values).issubset({0, 1})
-        
-        if is_binary:
+        # Determine metric type (must be provided at registration time)
+        entry = self._metrics.get(metric_name)
+        if not entry or "metric_type" not in entry:
+            raise ValueError(
+                f"Metric '{metric_name}' is missing required metric_type; "
+                "register it with metric_type='proportion' or 'mean'."
+            )
+        metric_type = entry["metric_type"]
+
+        if metric_type == "proportion":
             # Proportion test
             successes_a = int(data_a.sum())
             trials_a = len(data_a)
@@ -192,7 +209,7 @@ class ABTest:
             result['metric_type'] = 'binary'
             result['control_value'] = successes_a / trials_a
             result['treatment_value'] = successes_b / trials_b
-        else:
+        elif metric_type == "mean":
             # Continuous test
             result = self.backend.mean_t_test(
                 values_a=data_a,
@@ -202,6 +219,8 @@ class ABTest:
             result['metric_type'] = 'continuous'
             result['control_value'] = result['control_mean']
             result['treatment_value'] = result['treatment_mean']
+        else:
+            raise ValueError(f"Unknown metric_type '{metric_type}' for metric '{metric_name}'")
         
         # Add metadata
         result['metric_name'] = metric_name

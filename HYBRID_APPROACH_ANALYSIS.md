@@ -79,7 +79,7 @@ from typing import Dict, Optional
 import numpy as np
 from scipy import stats
 
-class SampleSizeCalculator:
+class SampleSizePlanner:
     """Calculate required sample size for experiments."""
     
     @staticmethod
@@ -183,7 +183,7 @@ class SampleSizeCalculator:
         }
 
 # Usage:
-calculator = SampleSizeCalculator()
+    calculator = SampleSizePlanner()
 
 # For conversion rate experiment
 result = calculator.for_proportion(

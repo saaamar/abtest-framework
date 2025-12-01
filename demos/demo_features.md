@@ -33,10 +33,8 @@ Required Sample Size:
   * Standard Deviation: 60s
   * Expected Treatment: 200s
 
-### 1C: Power Analysis
---------------------------------------------------------------------------------
+### 1C: Power Analysis (Future Work)
+---------------------------------------------------------------------------------
 Question: What power do we have with only 5,000 users?
-Traceback (most recent call last):
-  File "C:\Users\saaamar\repos\ab_testing\demo_feature_showcase.py", line 66, in <module>
-    power = calc.calculate_power_proportion(
-AttributeError: 'SampleSizeCalculator' object has no attribute 'calculate_power_proportion'
+
+Note: Earlier versions of this demo referenced a dedicated power-calculation helper that no longer exists. Sample-size planning now lives on the statistical backend via `sample_size_proportion` / `sample_size_mean`, and explicit power-calculation helpers are considered future work.

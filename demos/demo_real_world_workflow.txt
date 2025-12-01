@@ -12,7 +12,7 @@ Purpose: Before running the actual A/B test, validate that:
   1. Randomization infrastructure works correctly (no SRM)
   2. Metric collection is accurate
   3. No significant difference when both groups get same treatment
-  4. Estimate actual variance for sample size calculation
+  4. Estimate actual variance for sample size calculation [do we need this even if we have old data to learn?]
   
 Setup: Both groups get current model (no treatment difference)
 Duration: Run for 7 days to gather sufficient data

@@ -168,7 +168,7 @@ Both packages produce correct results:
 **Wrapping owl_ab_test (Simpler):**
 ```python
 class OwlBackend(StatisticalBackend):
-    def test_proportion(self, successes_a, trials_a, successes_b, trials_b, alpha=0.05):
+    def proportion_z_test(self, successes_a, trials_a, successes_b, trials_b, alpha=0.05):
         result = calculate_proportion_stats(
             success_count=successes_b,
             total_count=trials_b,
@@ -182,7 +182,7 @@ class OwlBackend(StatisticalBackend):
 **Wrapping abexp (More Complex):**
 ```python
 class AbexpBackend(StatisticalBackend):
-    def test_proportion(self, successes_a, trials_a, successes_b, trials_b, alpha=0.05):
+    def proportion_z_test(self, successes_a, trials_a, successes_b, trials_b, alpha=0.05):
         analyzer = FrequentistAnalyzer()
         
         # Need to construct binary arrays

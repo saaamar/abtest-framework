@@ -13,7 +13,7 @@ class OwlBackend(StatisticalBackend):
     for the AB testing framework.
     """
     
-    def test_proportion(
+    def proportion_z_test(
         self,
         successes_a: int,
         trials_a: int,
@@ -58,7 +58,7 @@ class OwlBackend(StatisticalBackend):
             'backend': 'owl_ab_test'
         }
     
-    def test_mean(
+    def mean_t_test(
         self,
         values_a: np.ndarray,
         values_b: np.ndarray,

@@ -182,7 +182,7 @@ class ABTest:
             successes_b = int(data_b.sum())
             trials_b = len(data_b)
             
-            result = self.backend.test_proportion(
+            result = self.backend.proportion_z_test(
                 successes_a=successes_a,
                 trials_a=trials_a,
                 successes_b=successes_b,
@@ -194,7 +194,7 @@ class ABTest:
             result['treatment_value'] = successes_b / trials_b
         else:
             # Continuous test
-            result = self.backend.test_mean(
+            result = self.backend.mean_t_test(
                 values_a=data_a,
                 values_b=data_b,
                 alpha=self.alpha

@@ -13,7 +13,7 @@ class StatisticalBackend(ABC):
     """
     
     @abstractmethod
-    def test_proportion(
+    def proportion_z_test(
         self,
         successes_a: int,
         trials_a: int,
@@ -43,7 +43,7 @@ class StatisticalBackend(ABC):
         pass
     
     @abstractmethod
-    def test_mean(
+    def mean_t_test(
         self,
         values_a: np.ndarray,
         values_b: np.ndarray,

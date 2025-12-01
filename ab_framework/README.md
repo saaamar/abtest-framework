@@ -665,7 +665,7 @@ The framework uses a backend interface for statistical tests. Currently implemen
 from ab_framework.backends import StatisticalBackend
 
 class MyBackend(StatisticalBackend):
-    def test_proportion(self, successes_a, trials_a, successes_b, trials_b, alpha):
+    def proportion_z_test(self, successes_a, trials_a, successes_b, trials_b, alpha):
         # Your implementation
         return {
             'p_value': ...,
@@ -675,7 +675,7 @@ class MyBackend(StatisticalBackend):
             # ... other fields
         }
     
-    def test_mean(self, values_a, values_b, alpha):
+    def mean_t_test(self, values_a, values_b, alpha):
         # Your implementation
         return {...}
 

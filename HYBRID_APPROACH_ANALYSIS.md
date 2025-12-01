@@ -717,7 +717,7 @@ class StatisticalBackend(ABC):
     """Abstract base for statistical computation backends."""
     
     @abstractmethod
-    def test_proportion(
+    def proportion_z_test(
         self,
         successes_a: int,
         trials_a: int,
@@ -740,7 +740,7 @@ class StatisticalBackend(ABC):
         pass
     
     @abstractmethod
-    def test_mean(
+    def mean_t_test(
         self,
         values_a: np.ndarray,
         values_b: np.ndarray,
@@ -774,7 +774,7 @@ from .base import StatisticalBackend
 class OwlBackend(StatisticalBackend):
     """Backend using owl_ab_test package."""
     
-    def test_proportion(
+    def proportion_z_test(
         self,
         successes_a: int,
         trials_a: int,
@@ -799,7 +799,7 @@ class OwlBackend(StatisticalBackend):
             'statistic': result['statistic']
         }
     
-    def test_mean(
+    def mean_t_test(
         self,
         values_a: np.ndarray,
         values_b: np.ndarray,
@@ -843,7 +843,7 @@ from .base import StatisticalBackend
 class ScipyBackend(StatisticalBackend):
     """Direct scipy backend (no third-party wrapper)."""
     
-    def test_proportion(
+    def proportion_z_test(
         self,
         successes_a: int,
         trials_a: int,
@@ -856,7 +856,7 @@ class ScipyBackend(StatisticalBackend):
         # ... (existing scipy+pandas code)
         pass
     
-    def test_mean(
+    def mean_t_test(
         self,
         values_a: np.ndarray,
         values_b: np.ndarray,

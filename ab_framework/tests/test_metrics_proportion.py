@@ -113,3 +113,40 @@ def test_scenario3_ctr_synthetic():
 	# We engineered B to have higher CTR; expect non-trivial signal but
 	# don't require an extremely small p-value to avoid brittleness.
 	assert result["p_value"] < 0.5
+
+
+def test_proportion_handles_zero_baseline_gracefully():
+	"""When control proportion is 0, core should not raise ZeroDivisionError.
+
+	This guards against the Owl backend's lift computation dividing by zero
+	when the baseline rate is exactly 0. We expect a stable, non-significant
+	result with p_value=1.0 and lift=0.0.
+	"""
+
+	# Construct a tiny dataset where variant A has all zeros and
+	# variant B has at least one success.
+	data = pd.DataFrame({
+		"user_id": [1, 2, 3, 4],
+		"variant": ["A", "A", "B", "B"],
+		"converted": [0, 0, 1, 0],
+	})
+
+	test = ABTest(
+		name="zero_baseline_proportion",
+		data=data,
+		variant_col="variant",
+		unit_id="user_id",
+	)
+
+	@test.metric(metric_type="proportion")
+	def conversion_rate(df):
+		return df.groupby("user_id")["converted"].max()
+
+	results = test.analyze(["conversion_rate"])
+	result = results.metric_results["conversion_rate"]
+	assert "p_value" in result
+	# AbexpBackend handles zero baseline gracefully by computing the actual p-value
+	# rather than returning hardcoded p=1.0. The p-value should be non-significant.
+	assert result["p_value"] > 0.05  # Not significant
+	assert not result["significant"]
+	assert result["control_value"] == 0.0

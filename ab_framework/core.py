@@ -4,8 +4,9 @@ from typing import Dict, List, Callable, Optional, Any
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import traceback
 
-from .backends import OwlBackend, StatisticalBackend
+from .backends import AbexpBackend, StatisticalBackend
 from .quality import QualityChecker
 
 class ABTest:
@@ -51,14 +52,14 @@ class ABTest:
             data: DataFrame with experiment data (event-level or aggregated)
             variant_col: Column name containing variant assignments ('A', 'B', etc.)
             unit_id: Column name for randomization unit (usually 'user_id')
-            backend: Statistical backend (defaults to OwlBackend)
+            backend: Statistical backend (defaults to AbexpBackend)
             alpha: Significance level (default 0.05)
         """
         self.name = name
         self.data = data.copy()
         self.variant_col = variant_col
         self.unit_id = unit_id
-        self.backend = backend if backend is not None else OwlBackend()
+        self.backend = backend if backend is not None else AbexpBackend()
         self.alpha = alpha
         self.timestamp = datetime.now().isoformat()
         
@@ -204,11 +205,11 @@ class ABTest:
                 trials_a=trials_a,
                 successes_b=successes_b,
                 trials_b=trials_b,
-                alpha=self.alpha
+                alpha=self.alpha,
             )
-            result['metric_type'] = 'binary'
-            result['control_value'] = successes_a / trials_a
-            result['treatment_value'] = successes_b / trials_b
+            result["metric_type"] = "binary"
+            result["control_value"] = successes_a / trials_a
+            result["treatment_value"] = successes_b / trials_b
         elif metric_type == "mean":
             # Continuous test
             result = self.backend.mean_t_test(
@@ -285,6 +286,7 @@ class ABTest:
                 result = self._test_metric(metric_name, variant_a, variant_b)
                 metric_results[metric_name] = result
             except Exception as e:
+                traceback.print_exc()
                 metric_results[metric_name] = {
                     'error': str(e),
                     'metric_name': metric_name

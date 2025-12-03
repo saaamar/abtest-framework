@@ -73,7 +73,7 @@ def main():
     # =========================================================================
     print("\n### STEP 4: Define Metrics ###\n")
     
-    @test.metric(metric_type="proportion")
+    @test.metric(metric_type="proportion", is_primary=True, monitor_alpha=0.05, monitor_power=0.80)
     def conversion_rate(data):
         """User-level conversion rate (% of users who converted)."""
         return data.groupby('user_id')['converted'].max()
@@ -87,8 +87,8 @@ def main():
     print("\n### STEP 5: Analyze Experiment ###\n")
     
     results = test.analyze(
-        metrics=['conversion_rate'],
-        run_srm_check=True
+        run_srm_check=True,
+        correction=None
     )
     
     # =========================================================================
@@ -104,6 +104,8 @@ def main():
     
     # Generate plain-English conclusion
     print(results.conclusion('conversion_rate'))
+    print("\nSOFT MONITORING DECISION:")
+    print(results.decision_soft_monitoring())
     
     # =========================================================================
     # STEP 8: Export results

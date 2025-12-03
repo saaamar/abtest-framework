@@ -1,6 +1,6 @@
 """Core ABTest class for experiment analysis."""
 
-from typing import Dict, List, Callable, Optional, Any
+from typing import Dict, List, Callable, Optional, Any, Literal
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -43,7 +43,8 @@ class ABTest:
         variant_col: str = 'variant',
         unit_id: str = 'user_id',
         backend: Optional[StatisticalBackend] = None,
-        alpha: float = 0.05
+        alpha: float = 0.05,
+        variants: Optional[List[str]] = None,
     ):
         """Initialize A/B test.
         
@@ -63,7 +64,14 @@ class ABTest:
         self.alpha = alpha
         self.timestamp = datetime.now().isoformat()
         
-        # Metric registry: name -> {"func": callable, "metric_type": str}
+        # Explicit variants configuration (e.g. ["A", "B"])
+        self.variants: Optional[List[str]] = variants
+        
+        # Metric registry: name -> metadata dict.
+        # For backward compatibility this at least contains:
+        #   {"func": callable, "metric_type": str}
+        # Additional fields (role, mde, non_inferiority_margin, etc.)
+        # can be added later without breaking existing users.
         self._metrics: Dict[str, Dict[str, Any]] = {}
         
         # Validate inputs
@@ -77,11 +85,31 @@ class ABTest:
         if self.unit_id not in self.data.columns:
             raise ValueError(f"Unit ID column '{self.unit_id}' not found in data")
         
-        variants = self.data[self.variant_col].unique()
-        if len(variants) < 2:
-            raise ValueError(f"Need at least 2 variants, found {len(variants)}")
+        data_variants = sorted(self.data[self.variant_col].unique())
+        if len(data_variants) < 2:
+            raise ValueError(f"Need at least 2 variants, found {len(data_variants)}")
+        
+        # If explicit variants were provided, validate them against the data
+        if self.variants is not None:
+            if len(self.variants) != 2:
+                raise ValueError(f"'variants' must contain exactly 2 labels, got {self.variants}")
+            missing = [v for v in self.variants if v not in data_variants]
+            if missing:
+                raise ValueError(f"Configured variants {missing} not found in data")
+        else:
+            # Default: first 2 variants in sorted order
+            self.variants = data_variants[:2]
     
-    def metric(self, func: Callable = None, *, metric_type: str) -> Callable:
+    def metric(
+        self,
+        func: Callable = None,
+        *,
+        metric_type: str,
+        is_primary: bool = False,
+        monitor_alpha: Optional[float] = None,
+        monitor_power: Optional[float] = None,
+        inferiority_margin: Optional[float] = None,
+    ) -> Callable:
         """Decorator to register a metric function.
         
         The metric function should take a DataFrame and return a pandas Series
@@ -106,7 +134,20 @@ class ABTest:
         def decorator(f: Callable) -> Callable:
             if metric_type not in ("proportion", "mean"):
                 raise ValueError("metric_type must be 'proportion' or 'mean'")
-            self._metrics[f.__name__] = {"func": f, "metric_type": metric_type}
+            # Track primary metric (only one allowed)
+            if is_primary:
+                existing_primary = getattr(self, "_primary_metric", None)
+                if existing_primary is not None and existing_primary != f.__name__:
+                    raise ValueError(f"Primary metric already set to '{existing_primary}'. Only one primary metric is allowed.")
+                self._primary_metric = f.__name__
+            self._metrics[f.__name__] = {
+                "func": f,
+                "metric_type": metric_type,
+                "is_primary": is_primary,
+                "monitor_alpha": monitor_alpha,
+                "monitor_power": monitor_power,
+                "inferiority_margin": inferiority_margin,
+            }
             return f
 
         # Support both @test.metric and @test.metric(...)
@@ -114,7 +155,16 @@ class ABTest:
             return decorator(func)
         return decorator
     
-    def register_metric(self, name: str, func: Callable, metric_type: str):
+    def register_metric(
+        self,
+        name: str,
+        func: Callable,
+        metric_type: str,
+        is_primary: bool = False,
+        monitor_alpha: Optional[float] = None,
+        monitor_power: Optional[float] = None,
+        inferiority_margin: Optional[float] = None,
+    ):
         """Register a metric function programmatically.
         
         Alternative to the @metric decorator for dynamic registration.
@@ -126,7 +176,30 @@ class ABTest:
         """
         if metric_type not in ("proportion", "mean"):
             raise ValueError("metric_type must be 'proportion' or 'mean'")
-        self._metrics[name] = {"func": func, "metric_type": metric_type}
+        if is_primary:
+            existing_primary = getattr(self, "_primary_metric", None)
+            if existing_primary is not None and existing_primary != name:
+                raise ValueError(f"Primary metric already set to '{existing_primary}'. Only one primary metric is allowed.")
+            self._primary_metric = name
+        self._metrics[name] = {
+            "func": func,
+            "metric_type": metric_type,
+            "is_primary": is_primary,
+            "monitor_alpha": monitor_alpha,
+            "monitor_power": monitor_power,
+            "inferiority_margin": inferiority_margin,
+        }
+
+    def set_primary_metric(self, metric_name: str):
+        """Convenience method to set the primary metric after registration."""
+        if metric_name not in self._metrics:
+            raise ValueError(f"Primary metric '{metric_name}' is not registered")
+        existing_primary = getattr(self, "_primary_metric", None)
+        if existing_primary is not None and existing_primary != metric_name:
+            raise ValueError(f"Primary metric already set to '{existing_primary}'. Only one primary metric is allowed.")
+        self._primary_metric = metric_name
+        # Update registry flag for consistency
+        self._metrics[metric_name]["is_primary"] = True
     
     def _compute_metric(self, metric_name: str) -> pd.DataFrame:
         """Compute metric values for all units.
@@ -230,45 +303,44 @@ class ABTest:
         result['significant'] = result['p_value'] < self.alpha
         result['sample_size_control'] = len(data_a)
         result['sample_size_treatment'] = len(data_b)
+        # Attach soft monitoring metadata from registry for summary purposes
+        try:
+            reg = self._metrics.get(metric_name, {})
+            for k in ('monitor_alpha', 'monitor_power', 'inferiority_margin', 'is_primary'):
+                if k in reg:
+                    result[k] = reg[k]
+        except Exception:
+            pass
         
         return result
     
     def analyze(
         self,
-        metrics: List[str],
-        variants: List[str] = None,
+        metrics: Optional[List[str]] = None,
         correction: Optional[str] = None,
         run_srm_check: bool = True
     ) -> 'ExperimentResults':
         """Analyze experiment metrics.
         
         Args:
-            metrics: List of metric names to analyze
-            variants: List of 2 variants to compare (defaults to first 2 found)
+            metrics: Optional list of metric names to analyze.
+                Defaults to all registered metrics.
             correction: Multiple testing correction ('bonferroni', 'fdr', or None)
             run_srm_check: Whether to run SRM check (default True)
         
         Returns:
-            ExperimentResults object with all analysis results
-        
-        Example:
-            >>> results = test.analyze(
-            ...     metrics=['conversion_rate', 'revenue_per_user'],
-            ...     correction='bonferroni'
-            ... )
-            >>> print(results.summary())
+            ExperimentResults object with all analysis results.
         """
-        # Determine variants
-        if variants is None:
-            all_variants = sorted(self.data[self.variant_col].unique())
-            if len(all_variants) < 2:
-                raise ValueError("Need at least 2 variants")
-            variants = all_variants[:2]
+        # Determine variants: always use configured variants (validated in __init__)
+        if not self.variants or len(self.variants) != 2:
+            raise ValueError("ABTest.variants must contain exactly 2 variant labels")
+        variant_a, variant_b = self.variants
         
-        if len(variants) != 2:
-            raise ValueError(f"Must specify exactly 2 variants, got {len(variants)}")
-        
-        variant_a, variant_b = variants
+        # Determine metrics: default to all registered metrics
+        if metrics is None:
+            metrics = list(self._metrics.keys())
+        if not metrics:
+            raise ValueError("No metrics specified and no metrics registered")
         
         # Run SRM check
         srm_result = None
@@ -280,7 +352,7 @@ class ABTest:
             srm_result = checker.check_srm(counts_filtered)
         
         # Test each metric
-        metric_results = {}
+        metric_results: Dict[str, Dict[str, Any]] = {}
         for metric_name in metrics:
             try:
                 result = self._test_metric(metric_name, variant_a, variant_b)
@@ -303,7 +375,9 @@ class ABTest:
             metric_results=metric_results,
             srm_result=srm_result,
             alpha=self.alpha,
-            correction=correction
+            correction=correction,
+            variants=self.variants,
+            primary_metric=getattr(self, "_primary_metric", None),
         )
     
     def _apply_correction(
@@ -365,7 +439,9 @@ class ExperimentResults:
         metric_results: Dict[str, Dict],
         srm_result: Optional[Dict],
         alpha: float,
-        correction: Optional[str]
+        correction: Optional[str],
+        variants: Optional[List[str]] = None,
+        primary_metric: Optional[str] = None,
     ):
         self.experiment_name = experiment_name
         self.timestamp = timestamp
@@ -373,6 +449,8 @@ class ExperimentResults:
         self.srm_result = srm_result
         self.alpha = alpha
         self.correction = correction
+        self.variants = variants
+        self.primary_metric = primary_metric
     
     def summary(self) -> str:
         """Generate human-readable summary."""
@@ -382,6 +460,9 @@ class ExperimentResults:
         lines.append(f"**Significance Level:** alpha = {self.alpha}")
         if self.correction:
             lines.append(f"**Multiple Testing Correction:** {self.correction}")
+        if self.primary_metric:
+            lines.append(f"**Primary Metric (soft monitoring):** {self.primary_metric}")
+            lines.append("Other metrics are descriptive and do not drive decisions.")
         lines.append("")
         
         # SRM check
@@ -404,6 +485,35 @@ class ExperimentResults:
             sig_icon = '[SIG]' if result['significant'] else '[NOT-SIG]'
             lines.append(f"### {sig_icon} {metric_name}")
             lines.append(f"- **Type:** {result['metric_type']}")
+            role = "primary" if metric_name == self.primary_metric else "monitor"
+            lines.append(f"- **Role:** {role}")
+            # Show soft monitoring metadata for monitors if available
+            if role == "monitor":
+                entry = None
+                # Find registration info for extra context (alpha/power/margin)
+                # metric_results does not carry registry fields; rely on result extras if present
+                monitor_alpha = result.get('monitor_alpha')
+                monitor_power = result.get('monitor_power')
+                inferiority_margin = result.get('inferiority_margin')
+                details = []
+                if monitor_alpha is not None:
+                    details.append(f"alpha={monitor_alpha}")
+                if monitor_power is not None:
+                    details.append(f"power={monitor_power}")
+                if inferiority_margin is not None:
+                    details.append(f"inferiority_margin={inferiority_margin}")
+                if details:
+                    lines.append(f"- **Monitor Settings:** {'; '.join(details)}")
+                # Simple CI vs margin note (non-blocking)
+                if inferiority_margin is not None:
+                    try:
+                        lb = float(result['ci_lower'])
+                        if lb >= -inferiority_margin:
+                            lines.append(f"- **NI Check:** CI lower bound ≥ -inferiority_margin (lb={lb:.4f} ≥ {-inferiority_margin:.4f})")
+                        else:
+                            lines.append(f"- **NI Check:** CI lower bound < -inferiority_margin (lb={lb:.4f} < {-inferiority_margin:.4f})")
+                    except Exception:
+                        pass
             lines.append(f"- **Control:** {result['control_value']:.4f} (n={result['sample_size_control']})")
             lines.append(f"- **Treatment:** {result['treatment_value']:.4f} (n={result['sample_size_treatment']})")
             lines.append(f"- **Lift:** {result['lift']:.2%}")
@@ -423,6 +533,8 @@ class ExperimentResults:
             'alpha': self.alpha,
             'correction': self.correction,
             'srm_check': self.srm_result,
+            'variants': self.variants,
+            'primary_metric': self.primary_metric,
             'metrics': self.metric_results
         }
     
@@ -549,3 +661,27 @@ class ExperimentResults:
         
         lines.append("=" * 70)
         return "\n".join(lines)
+
+    def decision_soft_monitoring(self) -> str:
+        """Primary-driven decision helper for soft monitoring mode.
+
+        Returns a concise decision based only on the primary metric. Other metrics
+        are treated as descriptive and do not block shipping.
+        """
+        if not self.primary_metric:
+            return "No primary metric configured. Set is_primary=True on one metric."
+        res = self.metric_results.get(self.primary_metric)
+        if not res or 'error' in res:
+            return f"Primary metric '{self.primary_metric}' has no valid result."
+        p = res.get('p_value')
+        sig = res.get('significant', False)
+        lift = res.get('lift')
+        if sig:
+            return (
+                f"Ship: primary '{self.primary_metric}' is significant "
+                f"(p={p:.4f}, lift={lift:.2%}). Monitored metrics are descriptive only."
+            )
+        return (
+            f"Do not ship: primary '{self.primary_metric}' is not significant "
+            f"(p={p:.4f}). Monitored metrics are descriptive only."
+        )

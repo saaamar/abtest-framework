@@ -1,0 +1,673 @@
+PS C:\Users\saaamar\repos\ab_testing> & C:/Users/saaamar/repos/ab_testing/venv/Scripts/Activate.ps1
+(venv) PS C:\Users\saaamar\repos\ab_testing>  & 'C:\Users\saaamar\repos\ab_testing\venv\Scripts\python.exe' 'c:\Users\saaamar\.vscode\extensions\ms-python.debugpy-2025.16.0-win32-x64\bundled\libs\debugpy\launcher' '52318' '--' '-m' 'demos.agent_sessions.demo_agent_quality_vs_resolution' 
+======================================================================
+AGENT SESSIONS DEMO - QUALITY UPLIFT WITH RESOLUTION GUARDRAIL
+Primary metric: AI answer quality rate
+Guardrail metric: session resolved rate
+======================================================================
+# Agent Session Data Overview
+- Total files found: 30
+- Days with data: 23
+- Days with no sessions (empty files): 7
+- Total sessions: 1603
+- Average sessions per day: 69.7
+- Min sessions per day: 20
+- Max sessions per day: 80
+- Median sessions per day: 80.0
+- Overall resolved rate: 3.182%
+- Overall AI quality rate: 30.193%
+- Resolved & high-quality rate: 0.499%
+- Groundedness share among bad-quality answers: 97.676%
+
+## Sessions per day (first 5 days with data)
+- 2024-11-02: 80 sessions
+- 2024-11-03: 80 sessions
+- 2024-11-04: 80 sessions
+- 2024-11-05: 80 sessions
+- 2024-11-06: 80 sessions
+
+----------------------------------------------------------------------
+PHASE 0: A/A WARMUP (QUALITY + RESOLUTION)
+First 7 days: verify both metrics before comparing models
+----------------------------------------------------------------------
+AA phase sample user_id: ['55041bdc870b6f5d', '4abed795b7101674', '25b4be896fe10020', 'e160945a12e77f5a', '91fdedb1fa1aba2b']
+# agent_sessions_quality_vs_resolution_AA
+**Analysis Date:** 2025-12-03T15:27:40.211171
+**Significance Level:** alpha = 0.05
+**Primary Metric (soft monitoring):** quality_rate
+Other metrics are descriptive and do not drive decisions.
+
+## Sample Ratio Mismatch Check
+[OK] No SRM detected - randomization looks good
+
+## Metric Results
+
+### [NOT-SIG] quality_rate
+- **Type:** binary
+- **Role:** primary
+- **Control:** 0.3074 (n=270)
+- **Treatment:** 0.2768 (n=271)
+- **Lift:** -9.97%
+- **P-value:** 0.433022
+- **95% CI:** [-0.1390, 0.0776]
+
+### [NOT-SIG] resolved_rate
+- **Type:** binary
+- **Role:** monitor
+- **Monitor Settings:** alpha=0.05; power=0.8; inferiority_margin=0.02
+- **NI Check:** CI lower bound ≥ -inferiority_margin (lb=-0.0167 ≥ -0.0200)
+- **Control:** 0.0111 (n=270)
+- **Treatment:** 0.0258 (n=271)
+- **Lift:** 132.47%
+- **P-value:** 0.203776
+- **95% CI:** [-0.0167, 0.0447]
+
+
+SOFT MONITORING DECISION:
+Do not ship: primary 'quality_rate' is not significant (p=0.4330). Monitored metrics are descriptive only.
+
+A/A interpretation:
+We expect no significant differences here on either metric; this checks the joint behavior of quality and resolution before rollout.
+
+----------------------------------------------------------------------
+SAMPLE SIZE PLANNING (Primary: quality_rate, Based on A/A)
+----------------------------------------------------------------------
+
+Baseline quality rate from A/A: 30.741%
+
+Sample size requirements for different MDEs:
+MDE        Target Rate     Sample Size     Est. Duration
+----------------------------------------------------------------------
+30%       39.963%        840             10.9 days (1.6 weeks)
+
+Note: Estimates based on 77 avg daily sessions from A/A period
+Assumptions: 50/50 split, alpha=0.05, power=0.8
+
+----------------------------------------------------------------------
+PHASE 1: A/B SIMULATION (QUALITY PRIMARY, RESOLUTION GUARDRAIL)
+Using remaining days as if a higher-quality model is rolled out
+----------------------------------------------------------------------
+Assumptions: 50/50 split, alpha=0.05, power=0.8
+AB phase sample user_id: ['ea7776c4ef415c55', '844bb6351ce28ed9', '0767b3b29a83ae1c', '7402f2f15a079240', '7624b5bb9f23e2f2']       
+
+Sequential monitoring: quality vs resolution up to each day
+
+======================================================================
+DAY 2024-11-11 - QUALITY (PRIMARY) VS RESOLUTION (GUARDRAIL)
+Experiment Progress: Day 1 (0.1 weeks) | Sample: 80
+======================================================================
+# agent_quality_vs_resolution_until_2024-11-11
+**Analysis Date:** 2025-12-03T15:27:40.295315
+**Significance Level:** alpha = 0.05
+**Primary Metric (soft monitoring):** quality_rate
+Other metrics are descriptive and do not drive decisions.
+
+## Sample Ratio Mismatch Check
+[OK] No SRM detected - randomization looks good
+
+## Metric Results
+
+### [NOT-SIG] quality_rate
+- **Type:** binary
+- **Role:** primary
+- **Control:** 0.2093 (n=43)
+- **Treatment:** 0.1622 (n=37)
+- **Lift:** -22.52%
+- **P-value:** 0.590161
+- **95% CI:** [-0.2875, 0.1932]
+
+### [NOT-SIG] resolved_rate
+- **Type:** binary
+- **Role:** monitor
+- **Monitor Settings:** alpha=0.05; power=0.8; inferiority_margin=0.02
+- **NI Check:** CI lower bound < -inferiority_margin (lb=-0.1095 < -0.0200)
+- **Control:** 0.0465 (n=43)
+- **Treatment:** 0.0000 (n=37)
+- **Lift:** -100.00%
+- **P-value:** 0.183995
+- **95% CI:** [-0.1095, 0.0000]
+
+
+SOFT MONITORING DECISION:
+Do not ship: primary 'quality_rate' is not significant (p=0.5902). Monitored metrics are descriptive only.
+
+Decision heuristics:
+- Ship if quality_rate is significantly higher in B vs A.
+- Ensure resolved_rate is not significantly worse in B.
+Status: quality_rate [NOT-SIG], resolved_rate [NOT-SIG]
+
+======================================================================
+DAY 2024-11-12 - QUALITY (PRIMARY) VS RESOLUTION (GUARDRAIL)
+Experiment Progress: Day 2 (0.3 weeks) | Sample: 160
+======================================================================
+# agent_quality_vs_resolution_until_2024-11-12
+**Analysis Date:** 2025-12-03T15:27:40.342993
+**Significance Level:** alpha = 0.05
+**Primary Metric (soft monitoring):** quality_rate
+Other metrics are descriptive and do not drive decisions.
+
+## Sample Ratio Mismatch Check
+[OK] No SRM detected - randomization looks good
+
+## Metric Results
+
+### [NOT-SIG] quality_rate
+- **Type:** binary
+- **Role:** primary
+- **Control:** 0.2262 (n=84)
+- **Treatment:** 0.1842 (n=76)
+- **Lift:** -18.56%
+- **P-value:** 0.512227
+- **95% CI:** [-0.2186, 0.1346]
+
+### [NOT-SIG] resolved_rate
+- **Type:** binary
+- **Role:** monitor
+- **Monitor Settings:** alpha=0.05; power=0.8; inferiority_margin=0.02
+- **NI Check:** CI lower bound < -inferiority_margin (lb=-0.0932 < -0.0200)
+- **Control:** 0.0476 (n=84)
+- **Treatment:** 0.0132 (n=76)
+- **Lift:** -72.37%
+- **P-value:** 0.210905
+- **95% CI:** [-0.0932, 0.0367]
+
+
+SOFT MONITORING DECISION:
+Do not ship: primary 'quality_rate' is not significant (p=0.5122). Monitored metrics are descriptive only.
+
+Decision heuristics:
+- Ship if quality_rate is significantly higher in B vs A.
+- Ensure resolved_rate is not significantly worse in B.
+Status: quality_rate [NOT-SIG], resolved_rate [NOT-SIG]
+
+======================================================================
+DAY 2024-11-13 - QUALITY (PRIMARY) VS RESOLUTION (GUARDRAIL)
+Experiment Progress: Day 3 (0.4 weeks) | Sample: 240
+======================================================================
+# agent_quality_vs_resolution_until_2024-11-13
+**Analysis Date:** 2025-12-03T15:27:40.388248
+**Significance Level:** alpha = 0.05
+**Primary Metric (soft monitoring):** quality_rate
+Other metrics are descriptive and do not drive decisions.
+
+## Sample Ratio Mismatch Check
+[OK] No SRM detected - randomization looks good
+
+## Metric Results
+
+### [NOT-SIG] quality_rate
+- **Type:** binary
+- **Role:** primary
+- **Control:** 0.2397 (n=121)
+- **Treatment:** 0.2185 (n=119)
+- **Lift:** -8.84%
+- **P-value:** 0.696266
+- **95% CI:** [-0.1715, 0.1291]
+
+### [NOT-SIG] resolved_rate
+- **Type:** binary
+- **Role:** monitor
+- **Monitor Settings:** alpha=0.05; power=0.8; inferiority_margin=0.02
+- **NI Check:** CI lower bound < -inferiority_margin (lb=-0.0823 < -0.0200)
+- **Control:** 0.0496 (n=121)
+- **Treatment:** 0.0420 (n=119)
+- **Lift:** -15.27%
+- **P-value:** 0.779184
+- **95% CI:** [-0.0823, 0.0672]
+
+
+SOFT MONITORING DECISION:
+Do not ship: primary 'quality_rate' is not significant (p=0.6963). Monitored metrics are descriptive only.
+
+Decision heuristics:
+- Ship if quality_rate is significantly higher in B vs A.
+- Ensure resolved_rate is not significantly worse in B.
+Status: quality_rate [NOT-SIG], resolved_rate [NOT-SIG]
+
+======================================================================
+DAY 2024-11-14 - QUALITY (PRIMARY) VS RESOLUTION (GUARDRAIL)
+Experiment Progress: Day 4 (0.6 weeks) | Sample: 320
+======================================================================
+# agent_quality_vs_resolution_until_2024-11-14
+**Analysis Date:** 2025-12-03T15:27:40.432494
+**Significance Level:** alpha = 0.05
+**Primary Metric (soft monitoring):** quality_rate
+Other metrics are descriptive and do not drive decisions.
+
+## Sample Ratio Mismatch Check
+[OK] No SRM detected - randomization looks good
+
+## Metric Results
+
+### [NOT-SIG] quality_rate
+- **Type:** binary
+- **Role:** primary
+- **Control:** 0.2331 (n=163)
+- **Treatment:** 0.2166 (n=157)
+- **Lift:** -7.11%
+- **P-value:** 0.722726
+- **95% CI:** [-0.1459, 0.1128]
+
+### [NOT-SIG] resolved_rate
+- **Type:** binary
+- **Role:** monitor
+- **Monitor Settings:** alpha=0.05; power=0.8; inferiority_margin=0.02
+- **NI Check:** CI lower bound < -inferiority_margin (lb=-0.0613 < -0.0200)
+- **Control:** 0.0491 (n=163)
+- **Treatment:** 0.0573 (n=157)
+- **Lift:** 16.80%
+- **P-value:** 0.742343
+- **95% CI:** [-0.0613, 0.0778]
+
+
+SOFT MONITORING DECISION:
+Do not ship: primary 'quality_rate' is not significant (p=0.7227). Monitored metrics are descriptive only.
+
+Decision heuristics:
+- Ship if quality_rate is significantly higher in B vs A.
+- Ensure resolved_rate is not significantly worse in B.
+Status: quality_rate [NOT-SIG], resolved_rate [NOT-SIG]
+
+======================================================================
+DAY 2024-11-15 - QUALITY (PRIMARY) VS RESOLUTION (GUARDRAIL)
+Experiment Progress: Day 5 (0.7 weeks) | Sample: 400
+======================================================================
+# agent_quality_vs_resolution_until_2024-11-15
+**Analysis Date:** 2025-12-03T15:27:40.480689
+**Significance Level:** alpha = 0.05
+**Primary Metric (soft monitoring):** quality_rate
+Other metrics are descriptive and do not drive decisions.
+
+## Sample Ratio Mismatch Check
+[OK] No SRM detected - randomization looks good
+
+## Metric Results
+
+### [NOT-SIG] quality_rate
+- **Type:** binary
+- **Role:** primary
+- **Control:** 0.2440 (n=209)
+- **Treatment:** 0.2251 (n=191)
+- **Lift:** -7.74%
+- **P-value:** 0.656300
+- **95% CI:** [-0.1364, 0.0986]
+
+### [NOT-SIG] resolved_rate
+- **Type:** binary
+- **Role:** monitor
+- **Monitor Settings:** alpha=0.05; power=0.8; inferiority_margin=0.02
+- **NI Check:** CI lower bound < -inferiority_margin (lb=-0.0560 < -0.0200)
+- **Control:** 0.0478 (n=209)
+- **Treatment:** 0.0524 (n=191)
+- **Lift:** 9.42%
+- **P-value:** 0.836257
+- **95% CI:** [-0.0560, 0.0650]
+
+
+SOFT MONITORING DECISION:
+Do not ship: primary 'quality_rate' is not significant (p=0.6563). Monitored metrics are descriptive only.
+
+Decision heuristics:
+- Ship if quality_rate is significantly higher in B vs A.
+- Ensure resolved_rate is not significantly worse in B.
+Status: quality_rate [NOT-SIG], resolved_rate [NOT-SIG]
+
+======================================================================
+DAY 2024-11-16 - QUALITY (PRIMARY) VS RESOLUTION (GUARDRAIL)
+Experiment Progress: Day 6 (0.9 weeks) | Sample: 480
+======================================================================
+# agent_quality_vs_resolution_until_2024-11-16
+**Analysis Date:** 2025-12-03T15:27:40.525008
+**Significance Level:** alpha = 0.05
+**Primary Metric (soft monitoring):** quality_rate
+Other metrics are descriptive and do not drive decisions.
+
+## Sample Ratio Mismatch Check
+[OK] No SRM detected - randomization looks good
+
+## Metric Results
+
+### [NOT-SIG] quality_rate
+- **Type:** binary
+- **Role:** primary
+- **Control:** 0.2480 (n=246)
+- **Treatment:** 0.2308 (n=234)
+- **Lift:** -6.94%
+- **P-value:** 0.659032
+- **95% CI:** [-0.1251, 0.0907]
+
+### [NOT-SIG] resolved_rate
+- **Type:** binary
+- **Role:** monitor
+- **Monitor Settings:** alpha=0.05; power=0.8; inferiority_margin=0.02
+- **NI Check:** CI lower bound < -inferiority_margin (lb=-0.0507 < -0.0200)
+- **Control:** 0.0447 (n=246)
+- **Treatment:** 0.0470 (n=234)
+- **Lift:** 5.13%
+- **P-value:** 0.904419
+- **95% CI:** [-0.0507, 0.0552]
+
+
+SOFT MONITORING DECISION:
+Do not ship: primary 'quality_rate' is not significant (p=0.6590). Monitored metrics are descriptive only.
+
+Decision heuristics:
+- Ship if quality_rate is significantly higher in B vs A.
+- Ensure resolved_rate is not significantly worse in B.
+Status: quality_rate [NOT-SIG], resolved_rate [NOT-SIG]
+
+======================================================================
+DAY 2024-11-17 - QUALITY (PRIMARY) VS RESOLUTION (GUARDRAIL)
+Experiment Progress: Day 7 (1.0 weeks) | Sample: 514
+======================================================================
+# agent_quality_vs_resolution_until_2024-11-17
+**Analysis Date:** 2025-12-03T15:27:40.571857
+**Significance Level:** alpha = 0.05
+**Primary Metric (soft monitoring):** quality_rate
+Other metrics are descriptive and do not drive decisions.
+
+## Sample Ratio Mismatch Check
+[OK] No SRM detected - randomization looks good
+
+## Metric Results
+
+### [NOT-SIG] quality_rate
+- **Type:** binary
+- **Role:** primary
+- **Control:** 0.2604 (n=265)
+- **Treatment:** 0.2329 (n=249)
+- **Lift:** -10.54%
+- **P-value:** 0.470925
+- **95% CI:** [-0.1328, 0.0779]
+
+### [NOT-SIG] resolved_rate
+- **Type:** binary
+- **Role:** monitor
+- **Monitor Settings:** alpha=0.05; power=0.8; inferiority_margin=0.02
+- **NI Check:** CI lower bound < -inferiority_margin (lb=-0.0469 < -0.0200)
+- **Control:** 0.0415 (n=265)
+- **Treatment:** 0.0442 (n=249)
+- **Lift:** 6.43%
+- **P-value:** 0.881312
+- **95% CI:** [-0.0469, 0.0522]
+
+
+SOFT MONITORING DECISION:
+Do not ship: primary 'quality_rate' is not significant (p=0.4709). Monitored metrics are descriptive only.
+
+Decision heuristics:
+- Ship if quality_rate is significantly higher in B vs A.
+- Ensure resolved_rate is not significantly worse in B.
+Status: quality_rate [NOT-SIG], resolved_rate [NOT-SIG]
+
+======================================================================
+DAY 2024-11-18 - QUALITY (PRIMARY) VS RESOLUTION (GUARDRAIL)
+Experiment Progress: Day 8 (1.1 weeks) | Sample: 546
+======================================================================
+# agent_quality_vs_resolution_until_2024-11-18
+**Analysis Date:** 2025-12-03T15:27:40.617394
+**Significance Level:** alpha = 0.05
+**Primary Metric (soft monitoring):** quality_rate
+Other metrics are descriptive and do not drive decisions.
+
+## Sample Ratio Mismatch Check
+[OK] No SRM detected - randomization looks good
+
+## Metric Results
+
+### [NOT-SIG] quality_rate
+- **Type:** binary
+- **Role:** primary
+- **Control:** 0.2645 (n=276)
+- **Treatment:** 0.2481 (n=270)
+- **Lift:** -6.18%
+- **P-value:** 0.661893
+- **95% CI:** [-0.1199, 0.0872]
+
+### [NOT-SIG] resolved_rate
+- **Type:** binary
+- **Role:** monitor
+- **Monitor Settings:** alpha=0.05; power=0.8; inferiority_margin=0.02
+- **NI Check:** CI lower bound < -inferiority_margin (lb=-0.0431 < -0.0200)
+- **Control:** 0.0399 (n=276)
+- **Treatment:** 0.0444 (n=270)
+- **Lift:** 11.52%
+- **P-value:** 0.789535
+- **95% CI:** [-0.0431, 0.0522]
+
+
+SOFT MONITORING DECISION:
+Do not ship: primary 'quality_rate' is not significant (p=0.6619). Monitored metrics are descriptive only.
+
+Decision heuristics:
+- Ship if quality_rate is significantly higher in B vs A.
+- Ensure resolved_rate is not significantly worse in B.
+Status: quality_rate [NOT-SIG], resolved_rate [NOT-SIG]
+
+======================================================================
+DAY 2024-11-19 - QUALITY (PRIMARY) VS RESOLUTION (GUARDRAIL)
+Experiment Progress: Day 9 (1.3 weeks) | Sample: 626
+======================================================================
+# agent_quality_vs_resolution_until_2024-11-19
+**Analysis Date:** 2025-12-03T15:27:40.667243
+**Significance Level:** alpha = 0.05
+**Primary Metric (soft monitoring):** quality_rate
+Other metrics are descriptive and do not drive decisions.
+
+## Sample Ratio Mismatch Check
+[OK] No SRM detected - randomization looks good
+
+## Metric Results
+
+### [NOT-SIG] quality_rate
+- **Type:** binary
+- **Role:** primary
+- **Control:** 0.2710 (n=310)
+- **Treatment:** 0.2848 (n=316)
+- **Lift:** 5.11%
+- **P-value:** 0.699107
+- **95% CI:** [-0.0854, 0.1131]
+
+### [NOT-SIG] resolved_rate
+- **Type:** binary
+- **Role:** monitor
+- **Monitor Settings:** alpha=0.05; power=0.8; inferiority_margin=0.02
+- **NI Check:** CI lower bound < -inferiority_margin (lb=-0.0409 < -0.0200)
+- **Control:** 0.0387 (n=310)
+- **Treatment:** 0.0411 (n=316)
+- **Lift:** 6.28%
+- **P-value:** 0.876652
+- **95% CI:** [-0.0409, 0.0458]
+
+
+SOFT MONITORING DECISION:
+Do not ship: primary 'quality_rate' is not significant (p=0.6991). Monitored metrics are descriptive only.
+
+Decision heuristics:
+- Ship if quality_rate is significantly higher in B vs A.
+- Ensure resolved_rate is not significantly worse in B.
+Status: quality_rate [NOT-SIG], resolved_rate [NOT-SIG]
+
+======================================================================
+DAY 2024-11-20 - QUALITY (PRIMARY) VS RESOLUTION (GUARDRAIL)
+Experiment Progress: Day 10 (1.4 weeks) | Sample: 706
+======================================================================
+# agent_quality_vs_resolution_until_2024-11-20
+**Analysis Date:** 2025-12-03T15:27:40.714020
+**Significance Level:** alpha = 0.05
+**Primary Metric (soft monitoring):** quality_rate
+Other metrics are descriptive and do not drive decisions.
+
+## Sample Ratio Mismatch Check
+[OK] No SRM detected - randomization looks good
+
+## Metric Results
+
+### [NOT-SIG] quality_rate
+- **Type:** binary
+- **Role:** primary
+- **Control:** 0.2751 (n=349)
+- **Treatment:** 0.3109 (n=357)
+- **Lift:** 13.03%
+- **P-value:** 0.295445
+- **95% CI:** [-0.0590, 0.1307]
+
+### [NOT-SIG] resolved_rate
+- **Type:** binary
+- **Role:** monitor
+- **Monitor Settings:** alpha=0.05; power=0.8; inferiority_margin=0.02
+- **NI Check:** CI lower bound < -inferiority_margin (lb=-0.0323 < -0.0200)
+- **Control:** 0.0344 (n=349)
+- **Treatment:** 0.0420 (n=357)
+- **Lift:** 22.20%
+- **P-value:** 0.597005
+- **95% CI:** [-0.0323, 0.0476]
+
+
+SOFT MONITORING DECISION:
+Do not ship: primary 'quality_rate' is not significant (p=0.2954). Monitored metrics are descriptive only.
+
+Decision heuristics:
+- Ship if quality_rate is significantly higher in B vs A.
+- Ensure resolved_rate is not significantly worse in B.
+Status: quality_rate [NOT-SIG], resolved_rate [NOT-SIG]
+
+======================================================================
+DAY 2024-11-21 - QUALITY (PRIMARY) VS RESOLUTION (GUARDRAIL)
+Experiment Progress: Day 11 (1.6 weeks) | Sample: 755
+======================================================================
+# agent_quality_vs_resolution_until_2024-11-21
+**Analysis Date:** 2025-12-03T15:27:40.756710
+**Significance Level:** alpha = 0.05
+**Primary Metric (soft monitoring):** quality_rate
+Other metrics are descriptive and do not drive decisions.
+
+## Sample Ratio Mismatch Check
+[OK] No SRM detected - randomization looks good
+
+## Metric Results
+
+### [NOT-SIG] quality_rate
+- **Type:** binary
+- **Role:** primary
+- **Control:** 0.2838 (n=377)
+- **Treatment:** 0.3148 (n=378)
+- **Lift:** 10.92%
+- **P-value:** 0.352461
+- **95% CI:** [-0.0613, 0.1233]
+
+### [NOT-SIG] resolved_rate
+- **Type:** binary
+- **Role:** monitor
+- **Monitor Settings:** alpha=0.05; power=0.8; inferiority_margin=0.02
+- **NI Check:** CI lower bound < -inferiority_margin (lb=-0.0309 < -0.0200)
+- **Control:** 0.0345 (n=377)
+- **Treatment:** 0.0423 (n=378)
+- **Lift:** 22.75%
+- **P-value:** 0.574913
+- **95% CI:** [-0.0309, 0.0466]
+
+
+SOFT MONITORING DECISION:
+Do not ship: primary 'quality_rate' is not significant (p=0.3525). Monitored metrics are descriptive only.
+
+Decision heuristics:
+- Ship if quality_rate is significantly higher in B vs A.
+- Ensure resolved_rate is not significantly worse in B.
+Status: quality_rate [NOT-SIG], resolved_rate [NOT-SIG]
+Reached planned experiment days; continuing until planned sample size for confidence.
+
+======================================================================
+DAY 2024-11-22 - QUALITY (PRIMARY) VS RESOLUTION (GUARDRAIL)
+Experiment Progress: Day 12 (1.7 weeks) | Sample: 802
+======================================================================
+# agent_quality_vs_resolution_until_2024-11-22
+**Analysis Date:** 2025-12-03T15:27:40.799456
+**Significance Level:** alpha = 0.05
+**Primary Metric (soft monitoring):** quality_rate
+Other metrics are descriptive and do not drive decisions.
+
+## Sample Ratio Mismatch Check
+[OK] No SRM detected - randomization looks good
+
+## Metric Results
+
+### [NOT-SIG] quality_rate
+- **Type:** binary
+- **Role:** primary
+- **Control:** 0.2900 (n=400)
+- **Treatment:** 0.3209 (n=402)
+- **Lift:** 10.65%
+- **P-value:** 0.342233
+- **95% CI:** [-0.0592, 0.1210]
+
+### [NOT-SIG] resolved_rate
+- **Type:** binary
+- **Role:** monitor
+- **Monitor Settings:** alpha=0.05; power=0.8; inferiority_margin=0.02
+- **NI Check:** CI lower bound < -inferiority_margin (lb=-0.0323 < -0.0200)
+- **Control:** 0.0350 (n=400)
+- **Treatment:** 0.0398 (n=402)
+- **Lift:** 13.72%
+- **P-value:** 0.720153
+- **95% CI:** [-0.0323, 0.0419]
+
+
+SOFT MONITORING DECISION:
+Do not ship: primary 'quality_rate' is not significant (p=0.3422). Monitored metrics are descriptive only.
+
+Decision heuristics:
+- Ship if quality_rate is significantly higher in B vs A.
+- Ensure resolved_rate is not significantly worse in B.
+Status: quality_rate [NOT-SIG], resolved_rate [NOT-SIG]
+Reached planned experiment days; continuing until planned sample size for confidence.
+
+======================================================================
+DAY 2024-11-23 - QUALITY (PRIMARY) VS RESOLUTION (GUARDRAIL)
+Experiment Progress: Day 13 (1.9 weeks) | Sample: 882
+======================================================================
+# agent_quality_vs_resolution_until_2024-11-23
+**Analysis Date:** 2025-12-03T15:27:40.848473
+**Significance Level:** alpha = 0.05
+**Primary Metric (soft monitoring):** quality_rate
+Other metrics are descriptive and do not drive decisions.
+
+## Sample Ratio Mismatch Check
+[OK] No SRM detected - randomization looks good
+
+## Metric Results
+
+### [NOT-SIG] quality_rate
+- **Type:** binary
+- **Role:** primary
+- **Control:** 0.2867 (n=436)
+- **Treatment:** 0.3318 (n=446)
+- **Lift:** 15.75%
+- **P-value:** 0.147095
+- **95% CI:** [-0.0410, 0.1313]
+
+### [NOT-SIG] resolved_rate
+- **Type:** binary
+- **Role:** monitor
+- **Monitor Settings:** alpha=0.05; power=0.8; inferiority_margin=0.02
+- **NI Check:** CI lower bound < -inferiority_margin (lb=-0.0312 < -0.0200)
+- **Control:** 0.0344 (n=436)
+- **Treatment:** 0.0381 (n=446)
+- **Lift:** 10.79%
+- **P-value:** 0.768121
+- **95% CI:** [-0.0312, 0.0386]
+
+
+SOFT MONITORING DECISION:
+Do not ship: primary 'quality_rate' is not significant (p=0.1471). Monitored metrics are descriptive only.
+
+Decision heuristics:
+- Ship if quality_rate is significantly higher in B vs A.
+- Ensure resolved_rate is not significantly worse in B.
+Status: quality_rate [NOT-SIG], resolved_rate [NOT-SIG]
+Reached planned experiment days.
+Reached planned sample size.
+Both planned days and sample size reached; stopping checks.
+
+Demo complete: tradeoff between quality uplift and resolution safeguarded.
+(venv) PS C:\Users\saaamar\repos\ab_testing> 

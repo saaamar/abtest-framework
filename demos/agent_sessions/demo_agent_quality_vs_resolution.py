@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import pandas as pd
 
 from ab_framework import ABTest
 
@@ -43,9 +44,9 @@ def main() -> None:
     os.chdir(repo_root)
 
     print("=" * 70)
-    print("AGENT SESSIONS DEMO - QUALITY UPLIFT WITH RESOLUTION GUARDRAIL")
+    print("AGENT SESSIONS DEMO - QUALITY UPLIFT WITH RESOLUTION MONITOR")
     print("Primary metric: AI answer quality rate")
-    print("Guardrail metric: session resolved rate")
+    print("Monitor metric: session resolved rate (soft monitoring)")
     print("=" * 70)
 
     df = load_agent_sessions()
@@ -64,16 +65,20 @@ def main() -> None:
     ab_days = days[DEFAULT_WARMUP_DAYS:]
 
     print("\n" + "-" * 70)
-    print("PHASE 0: A/A WARMUP (QUALITY + RESOLUTION)")
-    print(f"First {DEFAULT_WARMUP_DAYS} days: verify both metrics before comparing models")
+    print("PHASE 0: A/A WARMUP (QUALITY + RESOLUTION MONITOR)")
+    print(f"First {DEFAULT_WARMUP_DAYS} days: verify metrics before comparing models (soft monitoring)")
     print("-" * 70)
 
     df_aa = df[df["day"].isin(aa_days)].copy()
     if df_aa.empty:
         print("Not enough days for A/A warmup; skipping straight to A/B simulation.")
     else:
-        df_aa["user_id"] = df_aa["row_id"]
-        df_aa["variant"] = np.where(df_aa["row_id"] % 2 == 0, "A", "B")
+        # Standardize unit to conversation_id and deterministic 50/50 split
+        df_aa["user_id"] = df_aa["conversation_id"]
+        h_aa = pd.util.hash_pandas_object(df_aa["conversation_id"], index=False).astype(np.int64)
+        df_aa["variant"] = np.where((h_aa % 2) == 0, "A", "B")
+        # Debug: show sample of user_id assignment in A/A phase
+        print("AA phase sample user_id:", df_aa["user_id"].head().tolist())
 
         test_aa = ABTest(
             name="agent_sessions_quality_vs_resolution_AA",
@@ -82,16 +87,18 @@ def main() -> None:
             unit_id="user_id",
         )
 
-        @test_aa.metric(metric_type="proportion")
+        @test_aa.metric(metric_type="proportion", is_primary=True, monitor_alpha=REQUESTED_P_VALUE, monitor_power=REQUESTED_POWER)
         def quality_rate(data):
             return data.groupby("user_id")["quality"].max()
 
-        @test_aa.metric(metric_type="proportion")
+        @test_aa.metric(metric_type="proportion", inferiority_margin=0.02, monitor_alpha=REQUESTED_P_VALUE, monitor_power=REQUESTED_POWER)
         def resolved_rate(data):
             return data.groupby("user_id")["resolved"].max()
 
-        aa_results = test_aa.analyze(["quality_rate", "resolved_rate"], run_srm_check=True)
+        aa_results = test_aa.analyze(run_srm_check=True, correction=None)
         print(aa_results.summary())
+        print("\nSOFT MONITORING DECISION:")
+        print(aa_results.decision_soft_monitoring())
         print("\nA/A interpretation:")
         print(
             "We expect no significant differences here on either metric; "
@@ -157,8 +164,8 @@ def main() -> None:
         return
 
     print("\n" + "-" * 70)
-    print("PHASE 1: A/B SIMULATION (QUALITY PRIMARY, RESOLUTION GUARDRAIL)")
-    print("Using remaining days as if a higher-quality model is rolled out")
+    print("PHASE 1: A/B SIMULATION (QUALITY PRIMARY, RESOLUTION MONITOR)")
+    print("Using remaining days as if a higher-quality model is rolled out (soft monitoring)")
     print("-" * 70)
     print(f"Assumptions: 50/50 split, alpha={REQUESTED_P_VALUE}, power={REQUESTED_POWER}")
 
@@ -167,9 +174,12 @@ def main() -> None:
         print("No data available for A/B phase.")
         return
 
-    df_ab["user_id"] = df_ab["row_id"]
-    rng = np.random.default_rng(123)
-    df_ab["variant"] = np.where(rng.random(len(df_ab)) < 0.5, "A", "B")
+    # Standardize unit to conversation_id and deterministic 50/50 split
+    df_ab["user_id"] = df_ab["conversation_id"]
+    h_ab = pd.util.hash_pandas_object(df_ab["conversation_id"], index=False).astype(np.int64)
+    df_ab["variant"] = np.where((h_ab % 2) == 0, "A", "B")
+    # Debug: show sample of user_id assignment in A/B phase
+    print("AB phase sample user_id:", df_ab["user_id"].head().tolist())
 
     # Day-by-day cumulative monitoring
     print("\nSequential monitoring: quality vs resolution up to each day")
@@ -186,15 +196,20 @@ def main() -> None:
             unit_id="user_id",
         )
 
-        @test.metric(metric_type="proportion")
+        @test.metric(metric_type="proportion", is_primary=True, monitor_alpha=REQUESTED_P_VALUE, monitor_power=REQUESTED_POWER)
         def quality_rate(data):
             return data.groupby("user_id")["quality"].max()
 
-        @test.metric(metric_type="proportion")
+        @test.metric(
+            metric_type="proportion",
+            inferiority_margin=0.02,  # allow up to 2 percentage points degradation (descriptive only)
+            monitor_alpha=REQUESTED_P_VALUE,
+            monitor_power=REQUESTED_POWER,
+        )
         def resolved_rate(data):
             return data.groupby("user_id")["resolved"].max()
 
-        results = test.analyze(["quality_rate", "resolved_rate"], run_srm_check=True)
+        results = test.analyze(run_srm_check=True, correction=None)
 
         # Progress tracking
         days_elapsed = (day - experiment_start).days + 1
@@ -202,13 +217,15 @@ def main() -> None:
         total_sessions = len(current)
 
         print("\n" + "=" * 70)
-        print(f"DAY {day.isoformat()} - QUALITY (PRIMARY) VS RESOLUTION (GUARDRAIL)")
+        print(f"DAY {day.isoformat()} - QUALITY (PRIMARY) VS RESOLUTION (MONITOR)")
         print(f"Experiment Progress: Day {days_elapsed} ({weeks_elapsed:.1f} weeks) | Sample: {total_sessions:,}")
         print("=" * 70)
         print(results.summary())
+        print("\nSOFT MONITORING DECISION:")
+        print(results.decision_soft_monitoring())
         print("\nDecision heuristics:")
         print("- Ship if quality_rate is significantly higher in B vs A.")
-        print("- Ensure resolved_rate is not significantly worse in B.")
+        print("- Review resolved_rate descriptively; it does not block decisions (soft monitoring).")
 
         # Significance status summary
         qm = results.metric_results.get("quality_rate", {})
@@ -230,7 +247,12 @@ def main() -> None:
         elif reached_sample and reached_days:
             print("Reached planned sample size.")
 
-    print("\nDemo complete: tradeoff between quality uplift and resolution safeguarded.")
+        # Stop when both planned days and planned sample size are reached
+        if reached_days and reached_sample:
+            print("Both planned days and sample size reached; stopping checks.")
+            break
+
+    print("\nDemo complete: quality uplift with resolution monitored (soft monitoring).")
 
 
 if __name__ == "__main__":

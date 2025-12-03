@@ -16,6 +16,42 @@ A production-ready A/B testing **orchestration and standardization layer** with 
 ✅ **Pluggable statistical backends** - Currently uses `owl_ab_test`, easily extensible (e.g., `scipy`)  
 ✅ **Rich reporting** - Markdown summaries, DataFrames, JSON exports
 
+## Soft Monitoring Mode (Primary-Driven)
+
+For most experiments, decisions should be driven by a single primary metric while additional metrics are monitored for context. The framework supports a soft monitoring mode where you:
+
+- Designate exactly one metric as the primary via `is_primary=True`.
+- Keep multiple-testing correction disabled for soft monitoring (`correction=None`).
+- Optionally annotate monitor metrics with `inferiority_margin`, `monitor_alpha`, and `monitor_power` to display non-inferiority context in summaries.
+
+Example:
+
+```python
+test = ABTest(name="checkout_redesign", data=df)
+
+@test.metric(metric_type="proportion", is_primary=True, monitor_alpha=0.05, monitor_power=0.80)
+def conversion_rate(data):
+    return data.groupby('user_id')['purchased'].max()
+
+@test.metric(metric_type="proportion", inferiority_margin=0.01, monitor_alpha=0.05, monitor_power=0.80)
+def resolved_rate(data):
+    # Example guardrail-like monitor (descriptive only in soft mode)
+    return data.groupby('user_id')['resolved'].max()
+
+results = test.analyze(run_srm_check=True, correction=None)
+
+# Primary-driven decision helper
+print(results.decision_soft_monitoring())
+
+# Summary includes monitor settings and an NI Check (CI lower bound vs -inferiority_margin)
+print(results.summary())
+```
+
+Notes:
+- In soft monitoring, only the primary metric determines the decision; monitors are descriptive.
+- Use `inferiority_margin` to show non-inferiority checks in the summary (no automatic blocking).
+- Keep correction off (`None`) to avoid unnecessary power loss when the primary drives the decision.
+
 ## Installation
 
 ```bash

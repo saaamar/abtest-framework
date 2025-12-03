@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import pandas as pd
 
 from ab_framework import ABTest
 
@@ -80,11 +81,11 @@ def main() -> None:
     else:
         # Use deterministic IDs for reproducible variant assignment
         df_aa["user_id"] = df_aa["conversation_id"]
-        # Hash-based assignment for reproducibility
-        hash_values = df_aa["conversation_id"].apply(
-            lambda x: int(x, 16) % 2
-        )
-        df_aa["variant"] = np.where(hash_values == 0, "A", "B")
+        # Deterministic 50/50 split via pandas hash of conversation_id
+        h_aa = pd.util.hash_pandas_object(df_aa["conversation_id"], index=False).astype(np.int64)
+        df_aa["variant"] = np.where((h_aa % 2) == 0, "A", "B")
+        # Debug: show sample of user_id assignment in A/A phase
+        print("AA phase sample user_id:", df_aa["user_id"].head().tolist())
 
         test_aa = ABTest(
             name="agent_sessions_quality_AA",
@@ -93,12 +94,14 @@ def main() -> None:
             unit_id="user_id",
         )
 
-        @test_aa.metric(metric_type="proportion")
+        @test_aa.metric(metric_type="proportion", is_primary=True)
         def quality_rate(data):
             return data.groupby("user_id")["quality"].max()
 
-        aa_results = test_aa.analyze(["quality_rate"], run_srm_check=True)
+        aa_results = test_aa.analyze(run_srm_check=True, correction=None)
         print(aa_results.summary())
+        print("\nSOFT MONITORING DECISION:")
+        print(aa_results.decision_soft_monitoring())
         print("\nA/A interpretation:")
         print(
             "We expect no significant difference between A and B here; "
@@ -177,17 +180,11 @@ def main() -> None:
 
     # Use deterministic conversation_id for reproducible assignment
     df_ab["user_id"] = df_ab["conversation_id"]
-    # Use hash-based seeded randomization for reproducibility
-    rng = np.random.default_rng(seed=123)
-    # Hash conversation_id to get deterministic but unpredictable ordering
-    hash_values = df_ab["conversation_id"].apply(lambda x: int(x, 16))
-    sorted_indices = hash_values.argsort()
-    
-    # Create variant assignment
-    variants = np.empty(len(df_ab), dtype='U1')
-    variants[sorted_indices[:len(df_ab)//2]] = 'A'
-    variants[sorted_indices[len(df_ab)//2:]] = 'B'
-    df_ab["variant"] = variants
+    # Deterministic 50/50 split via pandas hash of conversation_id
+    h_ab = pd.util.hash_pandas_object(df_ab["conversation_id"], index=False).astype(np.int64)
+    df_ab["variant"] = np.where((h_ab % 2) == 0, "A", "B")
+    # Debug: show sample of user_id assignment in A/B phase
+    print("AB phase sample user_id:", df_ab["user_id"].head().tolist())
 
     # Day-by-day cumulative monitoring
     print("\nSequential monitoring: cumulative quality rate up to each day")
@@ -205,11 +202,11 @@ def main() -> None:
             unit_id="user_id",
         )
 
-        @test.metric(metric_type="proportion")
+        @test.metric(metric_type="proportion", is_primary=True)
         def quality_rate(data):
             return data.groupby("user_id")["quality"].max()
 
-        results = test.analyze(["quality_rate"], run_srm_check=True)
+        results = test.analyze(run_srm_check=True, correction=None)
 
         # Calculate experiment progress
         days_elapsed = (day - experiment_start).days + 1
@@ -223,6 +220,8 @@ def main() -> None:
               f"Sample: {total_sessions:,}/{planned_sample_size:,} ({pct_complete:.1f}%)")
         print("=" * 70)
         print(results.summary())
+        print("\nSOFT MONITORING DECISION:")
+        print(results.decision_soft_monitoring())
         
         # Significance status (no early stopping)
         quality_metric = results.metric_results.get("quality_rate", {})

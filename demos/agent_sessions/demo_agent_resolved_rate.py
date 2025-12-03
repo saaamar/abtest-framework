@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import pandas as pd
 
 from ab_framework import ABTest
 
@@ -7,7 +8,7 @@ from ab_framework import ABTest
 DEFAULT_WARMUP_DAYS = 7
 REQUESTED_P_VALUE = 0.05  # alpha level used for interpretations
 REQUESTED_POWER = 0.80    # target power for planning (informational)
-MDE_OPTIONS = [0.30] # 0.05, 0.10, 0.15, 0.30]  # example relative improvements for planning (informational)
+MDE_OPTIONS = [0.70] # 0.05, 0.10, 0.15, 0.30]  # example relative improvements for planning (informational)
 
 from demos.agent_sessions.agent_sessions_loader import load_agent_sessions, summarize_agent_sessions
 
@@ -68,9 +69,11 @@ def main() -> None:
     if df_aa.empty:
         print("Not enough days for A/A warmup; skipping straight to A/B simulation.")
     else:
-        # One session per (implicit) conversation; use row_id as conversation_id
-        df_aa["conversation_id"] = df_aa["row_id"]
-        df_aa["variant"] = np.where(df_aa["conversation_id"] % 2 == 0, "A", "B")
+        # Standardize unit to conversation_id and deterministic 50/50 split
+        # Ensure conversation_id exists (loaded from logs) and use stable hash split
+        df_aa["conversation_id"] = df_aa["conversation_id"]
+        h_aa = pd.util.hash_pandas_object(df_aa["conversation_id"], index=False).astype(np.int64)
+        df_aa["variant"] = np.where((h_aa % 2) == 0, "A", "B")
 
         test_aa = ABTest(
             name="agent_sessions_resolved_AA",
@@ -175,9 +178,10 @@ def main() -> None:
         print("No data available for A/B phase.")
         return
 
-    df_ab["conversation_id"] = df_ab["row_id"]
-    rng = np.random.default_rng(123)
-    df_ab["variant"] = np.where(rng.random(len(df_ab)) < 0.5, "A", "B")
+    # Standardize unit to conversation_id and deterministic 50/50 split
+    df_ab["conversation_id"] = df_ab["conversation_id"]
+    h_ab = pd.util.hash_pandas_object(df_ab["conversation_id"], index=False).astype(np.int64)
+    df_ab["variant"] = np.where((h_ab % 2) == 0, "A", "B")
 
     # Day-by-day cumulative monitoring
     print("\nSequential monitoring: cumulative resolved rate up to each day")

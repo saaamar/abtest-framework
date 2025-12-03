@@ -1,0 +1,11 @@
+{
+    "markdown.styles": [
+        "https://socialsimulation.net/css/post.min.css"
+    ],
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestArgs": [
+        "ab_framework/tests"
+    ],
+    "python.testing.autoTestDiscoverOnSaveEnabled": true
+}

@@ -283,6 +283,21 @@ class ABTest:
             result["metric_type"] = "binary"
             result["control_value"] = successes_a / trials_a
             result["treatment_value"] = successes_b / trials_b
+            # Fallback dispersion metrics when backend doesn't provide them
+            try:
+                p_a = result["control_value"]
+                p_b = result["treatment_value"]
+                # Standard deviation of Bernoulli variable per group
+                std_a = float(np.sqrt(p_a * (1.0 - p_a)))
+                std_b = float(np.sqrt(p_b * (1.0 - p_b)))
+                # Pooled proportion and its std (Bernoulli)
+                p_pool = (successes_a + successes_b) / float(trials_a + trials_b)
+                std_pool = float(np.sqrt(p_pool * (1.0 - p_pool)))
+                result.setdefault("std_control", std_a)
+                result.setdefault("std_treatment", std_b)
+                result.setdefault("std_pooled", std_pool)
+            except Exception:
+                pass
         elif metric_type == "mean":
             # Continuous test
             result = self.backend.mean_t_test(
@@ -293,6 +308,14 @@ class ABTest:
             result['metric_type'] = 'continuous'
             result['control_value'] = result['control_mean']
             result['treatment_value'] = result['treatment_mean']
+            # Fallback per-group sample std if backend doesn't provide
+            try:
+                std_a = float(np.std(data_a, ddof=1)) if len(data_a) > 1 else float('nan')
+                std_b = float(np.std(data_b, ddof=1)) if len(data_b) > 1 else float('nan')
+                result.setdefault('std_control', std_a)
+                result.setdefault('std_treatment', std_b)
+            except Exception:
+                pass
         else:
             raise ValueError(f"Unknown metric_type '{metric_type}' for metric '{metric_name}'")
         
@@ -516,6 +539,18 @@ class ExperimentResults:
                         pass
             lines.append(f"- **Control:** {result['control_value']:.4f} (n={result['sample_size_control']})")
             lines.append(f"- **Treatment:** {result['treatment_value']:.4f} (n={result['sample_size_treatment']})")
+            # Dispersion: prefer per-group stds; fallback to pooled only if both missing
+            sc = result.get('std_control')
+            st = result.get('std_treatment')
+            printed_std = False
+            if sc is not None:
+                lines.append(f"- **Std (control):** {float(sc):.6f}")
+                printed_std = True
+            if st is not None:
+                lines.append(f"- **Std (treatment):** {float(st):.6f}")
+                printed_std = True
+            if not printed_std and ('std_pooled' in result and result['std_pooled'] is not None):
+                lines.append(f"- **Std (pooled):** {float(result['std_pooled']):.6f}")
             lines.append(f"- **Lift:** {result['lift']:.2%}")
             lines.append(f"- **P-value:** {result['p_value']:.6f}")
             lines.append(f"- **95% CI:** [{result['ci_lower']:.4f}, {result['ci_upper']:.4f}]")

@@ -1,0 +1,44 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug demo_agent_resolved_rate",
+      "type": "python",
+      "request": "launch",
+      "module": "demos.agent_sessions.demo_agent_resolved_rate",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": true
+    },
+    {
+      "name": "Debug demo_agent_quality_rate",
+      "type": "python",
+      "request": "launch",
+      "module": "demos.agent_sessions.demo_agent_quality_rate",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": true
+    },
+    {
+      "name": "Debug demo_agent_quality_vs_resolution",
+      "type": "python",
+      "request": "launch",
+      "module": "demos.agent_sessions.demo_agent_quality_vs_resolution",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": true
+    },    
+    {
+      "name": "Flask: webapp.app",
+      "type": "python",
+      "request": "launch",
+      "module": "webapp.app",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "FLASK_APP": "webapp.app",
+        "FLASK_ENV": "development"
+      }
+    }
+  ]
+}

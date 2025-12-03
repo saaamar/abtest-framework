@@ -3,7 +3,38 @@ import numpy as np
 
 from ab_framework import ABTest
 
+# Configuration constants
+REQUESTED_P_VALUE = 0.05  # alpha level used for interpretations
+REQUESTED_POWER = 0.80    # target power for planning (informational)
+DEFAULT_WARMUP_DAYS = 7
+
+# MDE options (relative improvement targets). Examples: 5%, 10%, 15%, 30%
+MDE_OPTIONS = [0.30] # 0.05, 0.10, 0.15, 0.30]
+
 from demos.agent_sessions.agent_sessions_loader import load_agent_sessions, summarize_agent_sessions
+
+
+def estimate_experiment_duration(
+    required_sample_size: int,
+    avg_daily_traffic: float,
+    allocation_ratio: float = 0.5
+) -> dict:
+    """Estimate how long an A/B test will take given current traffic.
+    Mirrors the helper used in the quality-rate demo.
+    """
+    treatment_size = required_sample_size * allocation_ratio
+    control_size = required_sample_size * (1 - allocation_ratio)
+    daily_per_variant = avg_daily_traffic * allocation_ratio
+    days_needed = treatment_size / daily_per_variant if daily_per_variant > 0 else float('inf')
+    return {
+        'total_sample_size': required_sample_size,
+        'control_size': int(control_size),
+        'treatment_size': int(treatment_size),
+        'avg_daily_traffic': avg_daily_traffic,
+        'daily_per_variant': daily_per_variant,
+        'days_needed': days_needed,
+        'weeks_needed': days_needed / 7,
+    }
 
 
 def main() -> None:
@@ -29,12 +60,12 @@ def main() -> None:
 
     # Sort days and define A/A warmup vs A/B period
     days = sorted(df["day"].unique())
-    aa_days = days[:7]
-    ab_days = days[7:]
+    aa_days = days[:DEFAULT_WARMUP_DAYS]
+    ab_days = days[DEFAULT_WARMUP_DAYS:]
 
     print("\n" + "-" * 70)
     print("PHASE 0: A/A WARMUP (QUALITY + RESOLUTION)")
-    print("First 7 days: verify both metrics before comparing models")
+    print(f"First {DEFAULT_WARMUP_DAYS} days: verify both metrics before comparing models")
     print("-" * 70)
 
     df_aa = df[df["day"].isin(aa_days)].copy()
@@ -67,6 +98,60 @@ def main() -> None:
             "this checks the joint behavior of quality and resolution before rollout."
         )
 
+        # Sample size planning for primary metric (quality_rate)
+        quality_metric = aa_results.metric_results.get("quality_rate", {})
+        baseline_rate = quality_metric.get("control_value", 0.0)
+
+        print("\n" + "-" * 70)
+        print("SAMPLE SIZE PLANNING (Primary: quality_rate, Based on A/A)")
+        print("-" * 70)
+
+        if baseline_rate > 0:
+            print(f"\nBaseline quality rate from A/A: {baseline_rate:.3%}")
+            print("\nSample size requirements for different MDEs:")
+            print(f"{'MDE':<10} {'Target Rate':<15} {'Sample Size':<15} {'Est. Duration':<20}")
+            print("-" * 70)
+
+            avg_daily_traffic = len(df_aa) / len(aa_days) if aa_days else 0
+
+            # Plan with last MDE for downstream controls
+            global planned_sample_size, planned_days
+            planned_sample_size = 0
+            planned_days = 0
+            for mde in MDE_OPTIONS:
+                target_rate = baseline_rate * (1 + mde)
+
+                sample_result = test_aa.backend.sample_size_proportion(
+                    baseline_rate=baseline_rate,
+                    mde=mde,
+                    alpha=REQUESTED_P_VALUE,
+                    power=REQUESTED_POWER,
+                )
+
+                total_size = sample_result['total_size']
+
+                duration_est = estimate_experiment_duration(
+                    required_sample_size=total_size,
+                    avg_daily_traffic=avg_daily_traffic,
+                    allocation_ratio=0.5
+                )
+
+                print(f"{mde*100:.0f}%{'':<6} "
+                      f"{target_rate:.3%}{'':<7} "
+                      f"{total_size:<15} "
+                      f"{duration_est['days_needed']:.1f} days "
+                      f"({duration_est['weeks_needed']:.1f} weeks)")
+
+            print(f"\nNote: Estimates based on {avg_daily_traffic:.0f} avg daily sessions from A/A period")
+            print(f"Assumptions: 50/50 split, alpha={REQUESTED_P_VALUE}, power={REQUESTED_POWER}")
+            planned_sample_size = total_size
+            planned_days = int(np.ceil(duration_est['days_needed'])) if np.isfinite(duration_est['days_needed']) else 0
+        else:
+            print("\nWarning: Baseline quality rate is 0. Cannot calculate sample size.")
+            print("Need more data or different metric definition.")
+            planned_sample_size = 0
+            planned_days = 0
+
     if not ab_days:
         print("\nNo days left for A/B period; demo complete.")
         return
@@ -75,6 +160,7 @@ def main() -> None:
     print("PHASE 1: A/B SIMULATION (QUALITY PRIMARY, RESOLUTION GUARDRAIL)")
     print("Using remaining days as if a higher-quality model is rolled out")
     print("-" * 70)
+    print(f"Assumptions: 50/50 split, alpha={REQUESTED_P_VALUE}, power={REQUESTED_POWER}")
 
     df_ab = df[df["day"].isin(ab_days)].copy()
     if df_ab.empty:
@@ -87,6 +173,7 @@ def main() -> None:
 
     # Day-by-day cumulative monitoring
     print("\nSequential monitoring: quality vs resolution up to each day")
+    experiment_start = min(ab_days)
     for day in sorted(ab_days):
         current = df_ab[df_ab["day"] <= day].copy()
         if current.empty:
@@ -109,13 +196,39 @@ def main() -> None:
 
         results = test.analyze(["quality_rate", "resolved_rate"], run_srm_check=True)
 
+        # Progress tracking
+        days_elapsed = (day - experiment_start).days + 1
+        weeks_elapsed = days_elapsed / 7
+        total_sessions = len(current)
+
         print("\n" + "=" * 70)
         print(f"DAY {day.isoformat()} - QUALITY (PRIMARY) VS RESOLUTION (GUARDRAIL)")
+        print(f"Experiment Progress: Day {days_elapsed} ({weeks_elapsed:.1f} weeks) | Sample: {total_sessions:,}")
         print("=" * 70)
         print(results.summary())
         print("\nDecision heuristics:")
         print("- Ship if quality_rate is significantly higher in B vs A.")
         print("- Ensure resolved_rate is not significantly worse in B.")
+
+        # Significance status summary
+        qm = results.metric_results.get("quality_rate", {})
+        rm = results.metric_results.get("resolved_rate", {})
+        q_stat = "SIG" if qm.get("significant", False) else "NOT-SIG"
+        r_stat = "SIG" if rm.get("significant", False) else "NOT-SIG"
+        print(f"Status: quality_rate [{q_stat}], resolved_rate [{r_stat}]")
+
+        # Dual stop criteria using planned values from A/A planning
+        reached_days = planned_days > 0 and days_elapsed >= planned_days
+        reached_sample = planned_sample_size > 0 and total_sessions >= planned_sample_size
+
+        if reached_days and not reached_sample:
+            print("Reached planned experiment days; continuing until planned sample size for confidence.")
+        elif reached_days and reached_sample:
+            print("Reached planned experiment days.")
+        if reached_sample and not reached_days:
+            print("Reached planned sample size; continuing until planned days for confidence.")
+        elif reached_sample and reached_days:
+            print("Reached planned sample size.")
 
     print("\nDemo complete: tradeoff between quality uplift and resolution safeguarded.")
 

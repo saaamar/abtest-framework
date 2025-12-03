@@ -1,6 +1,7 @@
 import json
 import os
 import glob
+import hashlib
 from datetime import date
 from typing import Optional
 
@@ -22,11 +23,29 @@ def _infer_day_from_filename(path: str, default_year: int = 2024) -> date:
         return date(default_year, 1, 1)
 
 
+def _create_deterministic_id(day: date, file_name: str, local_index: int) -> str:
+    """Create a deterministic ID from day, file, and index.
+    
+    This ensures that the same session always gets the same ID across runs,
+    making A/B variant assignment reproducible.
+    """
+    # Use SHA256 hash for deterministic but unpredictable IDs
+    content = f"{day.isoformat()}|{file_name}|{local_index}"
+    hash_digest = hashlib.sha256(content.encode('utf-8')).hexdigest()
+    # Return first 16 chars for readability (64 bits of entropy)
+    return hash_digest[:16]
+
+
 def load_agent_sessions(data_dir: Optional[str] = None) -> pd.DataFrame:
     """Load all agent session JSON files into a normalized DataFrame.
 
     Expected file pattern: 'Sessions MM_DD.json' under data/agent_data.
     Each file is a JSON array of objects with a top-level 'Value' field.
+    
+    Key features:
+    - Every file gets a timestamp entry (even if empty)
+    - Deterministic session_id and conversation_id ensure reproducible A/B assignment
+    - session_id = conversation_id (one session per conversation assumption)
     """
     # Resolve default data directory relative to repo root
     if data_dir is None:
@@ -36,15 +55,23 @@ def load_agent_sessions(data_dir: Optional[str] = None) -> pd.DataFrame:
     pattern = os.path.join(data_dir, "Sessions *.json")
     paths = sorted(glob.glob(pattern))
 
+    # Track all days present (including empty files)
+    all_days = []
     rows = []
+    
     for path in paths:
         day_val = _infer_day_from_filename(path)
         file_name = os.path.basename(path)
+        all_days.append(day_val)
+        
         try:
             with open(path, "r", encoding="utf-8") as f:
                 items = json.load(f)
         except json.JSONDecodeError:
-            # Skip malformed files but keep going
+            # Empty or malformed file - still track the day
+            continue
+        except Exception:
+            # File doesn't exist or other error - skip
             continue
 
         for idx, item in enumerate(items):
@@ -57,12 +84,18 @@ def load_agent_sessions(data_dir: Optional[str] = None) -> pd.DataFrame:
 
             resolved = 1 if session_outcome == "ResolvedImplied" else 0
             quality = 1 if is_quality_answer else 0
+            
+            # Create deterministic IDs
+            session_id = _create_deterministic_id(day_val, file_name, idx)
+            conversation_id = session_id  # One session per conversation
 
             rows.append(
                 {
                     "day": day_val,
                     "file_name": file_name,
                     "local_index": idx,
+                    "session_id": session_id,
+                    "conversation_id": conversation_id,
                     "sessionOutcome": session_outcome,
                     "isQualityAnswer": is_quality_answer,
                     "badQualityPrimaryRootCause": bad_root_cause,
@@ -72,10 +105,14 @@ def load_agent_sessions(data_dir: Optional[str] = None) -> pd.DataFrame:
             )
 
     if not rows:
+        # Return empty DataFrame with all expected columns
         return pd.DataFrame(
             columns=[
                 "day",
                 "file_name",
+                "local_index",
+                "session_id",
+                "conversation_id",
                 "row_id",
                 "sessionOutcome",
                 "isQualityAnswer",
@@ -86,9 +123,18 @@ def load_agent_sessions(data_dir: Optional[str] = None) -> pd.DataFrame:
         )
 
     df = pd.DataFrame(rows)
-    # Create a global row_id / user_id surrogate
+    
+    # Create row_id for backward compatibility (sequential index)
     df = df.reset_index(drop=True)
     df["row_id"] = df.index.astype(int)
+    
+    # Ensure all days are represented (even those with no data)
+    # This helps with timeline visualization and gap detection
+    if all_days:
+        unique_days = sorted(set(all_days))
+        df.attrs['all_days'] = unique_days
+        df.attrs['days_with_data'] = sorted(df['day'].unique())
+    
     return df
 
 
@@ -99,7 +145,13 @@ def summarize_agent_sessions(df: pd.DataFrame) -> None:
         print("No agent session data found.")
         return
 
-    days_present = df["day"].nunique()
+    # Check for missing days
+    all_days = df.attrs.get('all_days', [])
+    days_with_data = df.attrs.get('days_with_data', [])
+    days_present = len(days_with_data)
+    total_files = len(all_days)
+    missing_days = set(all_days) - set(days_with_data)
+    
     total_sessions = len(df)
 
     sessions_per_day = df.groupby("day").size()
@@ -120,7 +172,12 @@ def summarize_agent_sessions(df: pd.DataFrame) -> None:
         grounded_share = 0.0
 
     print("# Agent Session Data Overview")
-    print(f"- Days present: {days_present}")
+    print(f"- Total files found: {total_files}")
+    print(f"- Days with data: {days_present}")
+    if missing_days:
+        print(f"- Days with no sessions (empty files): {len(missing_days)}")
+        if len(missing_days) <= 5:
+            print(f"  → {', '.join(d.isoformat() for d in sorted(missing_days))}")
     print(f"- Total sessions: {total_sessions}")
     print(f"- Average sessions per day: {avg_sessions_per_day:.1f}")
     print(f"- Min sessions per day: {min_sessions_per_day}")
@@ -131,7 +188,7 @@ def summarize_agent_sessions(df: pd.DataFrame) -> None:
     print(f"- Resolved & high-quality rate: {resolved_and_quality_rate:.3%}")
     print(f"- Groundedness share among bad-quality answers: {grounded_share:.3%}")
 
-    # Optionally show the first few days with their counts for context
-    print("\n## Sessions per day (first 5 days)")
+    # Show first few days with their counts
+    print("\n## Sessions per day (first 5 days with data)")
     for d, n in sessions_per_day.sort_index().head(5).items():
         print(f"- {d.isoformat()}: {n} sessions")

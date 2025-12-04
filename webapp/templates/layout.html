@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Agent A/B Experiments</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body class="app-body">
+  <div class="app-root">
+    <header class="app-header">
+      <div class="app-header-left">
+        <div class="app-logo-circle">A/B</div>
+        <div class="app-title-group">
+          <div class="app-title">AI Agent A/B Experiments</div>
+          <div class="app-subtitle">Plan and monitor AI agent rollouts</div>
+        </div>
+      </div>
+      <div class="app-header-right">
+        {% if today and day_index and total_days %}
+          {% set prev_day = day_index - 1 %}
+          {% set next_day = day_index + 1 %}
+          <div class="today-and-nav">
+            <div class="results-day-nav">
+              {% if prev_day >= 1 %}
+                <a class="day-nav-link" href="{{ url_for('results', day=prev_day) }}"><i class="fa fa-chevron-left"></i></a>
+              {% else %}
+                <span class="day-nav-link disabled"><i class="fa fa-chevron-left"></i></span>
+              {% endif %}
+            </div>
+            <div class="today-picker">
+              <form method="get" action="{{ url_for('results') }}">
+                <label for="today-input">Today</label>
+                <input id="today-input" type="date" name="date" value="{{ today }}">
+                <button type="submit" class="btn btn-ghost">Go</button>
+              </form>
+            </div>
+            <div class="results-day-nav">
+              {% if next_day <= total_days %}
+                <a class="day-nav-link" href="{{ url_for('results', day=next_day) }}"><i class="fa fa-chevron-right"></i></a>
+              {% else %}
+                <span class="day-nav-link disabled"><i class="fa fa-chevron-right"></i></span>
+              {% endif %}
+            </div>
+          </div>
+        {% elif today %}
+          <div class="today-picker">
+            <form method="get" action="{{ url_for('results') }}">
+              <label for="today-input">Today</label>
+              <input id="today-input" type="date" name="date" value="{{ today }}">
+              <button type="submit" class="btn btn-ghost">Go</button>
+            </form>
+          </div>
+        {% endif %}
+        <span class="env-pill">Demo</span>
+        <div class="user-avatar">SC</div>
+      </div>
+    </header>
+
+    <main class="main-shell">
+      {% if show_agents %}
+      <aside class="agents-panel">
+        <div class="agents-header">Agents</div>
+        <div class="agent-card agent-card-selected">
+          <div class="agent-name">Original</div>
+          <div class="agent-model">model: gpt-4.1</div>
+          <div class="agent-instructions">
+            Default production assistant answering customer questions.
+          </div>
+        </div>
+        <div class="agent-card">
+          <div class="agent-name">B agent</div>
+          <div class="agent-model">model: gpt-4.1-mini</div>
+          <div class="agent-instructions">
+            Experimental agent optimized for higher quality and faster resolution.
+          </div>
+        </div>
+      </aside>
+      {% endif %}
+
+      <section class="main-panel">
+        {% include content_template %}
+      </section>
+    </main>
+  </div>
+
+  <div id="stat-explain-modal" class="stat-explain-modal" style="display:none;">
+    <div class="stat-explain-backdrop" onclick="closeStatExplainModal()"></div>
+    <div class="stat-explain-dialog">
+      <div class="stat-explain-header">
+        <h2>How we make this decision</h2>
+        <button type="button" class="stat-explain-close" onclick="closeStatExplainModal()">×</button>
+      </div>
+      <div class="stat-explain-body">
+        <p>
+          We use the p-value to decide whether the difference between
+          treatment and control is statistically significant. The 95%
+          confidence interval is additional information that shows a
+          range of plausible true differences.
+        </p>
+        <p>
+          <b>p-value:</b> "If there were really no difference between
+          treatment and control, how surprising would this data be?" When
+          the p-value is smaller than our threshold α (for example 0.05),
+          we say the result is statistically significant and reject H0 the
+          "no difference" hypothesis (aka null hypothesis).
+        </p>
+        <p>
+          <b>95% confidence interval (aka CI):</b> The 95% confidence interval for (treatment − control) is a range
+          of effect sizes that are plausible given the data. If the entire
+          interval is above 0, the treatment is likely better. If it is
+          below 0, the treatment is likely worse. If it crosses 0, the
+          data are compatible with "no real difference," and any true
+          effect is likely small and somewhere inside that range.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function openStatExplainModal(event) {
+      if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+      }
+      var modal = document.getElementById('stat-explain-modal');
+      if (modal) {
+        modal.style.display = 'block';
+      }
+    }
+
+    function closeStatExplainModal() {
+      var modal = document.getElementById('stat-explain-modal');
+      if (modal) {
+        modal.style.display = 'none';
+      }
+    }
+  </script>
+</body>
+</html>

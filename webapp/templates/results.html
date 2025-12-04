@@ -1,0 +1,238 @@
+<div class="results-root">
+  <section class="results-header">
+    <h1 class="results-title">Experiment results</h1>
+    {% if experiment %}
+      <div class="results-header-row">
+        <div class="results-header-block">
+          <h2 class="results-subheading">Experiment context</h2>
+          <p class="results-subtitle">
+            <strong>Name:</strong> {{ experiment.name }}
+          </p>
+          <p class="results-subtitle">
+            <strong>Status:</strong> {{ experiment.status }}
+          </p>
+          {% if day_index and total_days %}
+          <p class="results-subtitle">
+            <strong>Day:</strong>
+            {% if day_index > 7 %}
+              experiment day {{ day_index - 7 }} (data day {{ day_index }} of {{ total_days }})
+            {% else %}
+              A/A warmup (data day {{ day_index }} of {{ total_days }})
+            {% endif %}
+          </p>
+          {% endif %}
+          {% if current_total_n is not none %}
+          <p class="results-subtitle">
+            <strong>Current sample size (primary):</strong>
+            ~{{ current_total_n }} {{ primary_unit_label or 'conversations' }}
+          </p>
+          {% endif %}
+        </div>
+        <div class="results-header-block">
+          <h2 class="results-subheading">Experiment setup & progress</h2>
+          {% if experiment.planned_per_variant is not none %}
+          <p class="results-subtitle">
+            <strong>Planned sample size:</strong>
+            {{ experiment.planned_per_variant }} {{ primary_unit_label or 'conversations' }} per variant
+            ({{ experiment.planned_per_variant * 2 }} total)
+          </p>
+          {% endif %}
+          {% if experiment.planned_days is not none %}
+          <p class="results-subtitle">
+            <strong>Planned duration:</strong> ~{{ experiment.planned_days }} days
+          </p>
+          {% endif %}
+          <p class="results-subtitle">
+            <strong>Statistical plan:</strong>
+            {% if experiment.mde_relative is not none and experiment.power is not none %}
+              target uplift {{ "%.1f" | format(experiment.mde_relative * 100) }}%,
+              power {{ "%.0f" | format(experiment.power * 100) }}%,
+              α = {{ experiment.alpha }}
+            {% else %}
+              α = {{ experiment.alpha }}, power = {{ experiment.power }}
+            {% endif %}
+          </p>
+          <p class="results-subtitle">
+            {% if stop_recommended %}
+              ✅ Recommendation: you have reached the planned sample size
+              and duration. It is reasonable to stop the experiment and
+              make a decision.
+            {% else %}
+              ⚠ Recommendation: this looks like an interim read. We
+              recommend continuing until the planned sample size and
+              duration are both reached.
+            {% endif %}
+          </p>
+          {% if sample_ok is not none and days_ok is not none and (not sample_ok or not days_ok) %}
+          <p class="results-subtitle results-subtitle-warning">
+            ⚠ Interim results: planned sample size and/or duration not yet
+            reached. Do not make a final decision based on these
+            results yet.
+          </p>
+          {% endif %}
+          <form method="post" action="{{ url_for('stop_experiment') }}" style="margin-top: 8px;">
+            <button type="submit" class="btn btn-secondary" {% if experiment.status != 'running' %}disabled{% endif %}>
+              Stop experiment
+            </button>
+          </form>
+        </div>
+      </div>
+    {% else %}
+      <p class="results-subtitle">
+        No running experiment found. Configure and start one from the setup screen.
+      </p>
+    {% endif %}
+  </section>
+
+  {% if experiment %}
+  <section class="results-metrics-grid">
+    {% for card in metric_cards %}
+      <article class="metric-card metric-card-{{ card.status }}">
+        <header class="metric-card-header">
+          <div>
+            <div class="metric-name">{{ card.name }}</div>
+            <div class="metric-role">{{ card.role }}</div>
+          </div>
+          <div class="metric-p-chip metric-p-chip-{{ 'sig' if card.p_value < card.alpha else 'ns' }}">
+            p = {{ "%.3f" | format(card.p_value) }}
+          </div>
+        </header>
+        <div class="metric-card-body">
+          <div class="metric-row">
+            <span class="metric-label">Control</span>
+            <span class="metric-value">{{ "%.3f" | format(card.control_value) }}</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">Treatment</span>
+            <span class="metric-value">{{ "%.3f" | format(card.treatment_value) }}</span>
+          </div>
+          {% if card.std_control is not none %}
+          <div class="metric-row metric-row-subtle">
+            <span class="metric-label">Std (control)</span>
+            <span class="metric-value">{{ "%.3f" | format(card.std_control) }}</span>
+          </div>
+          {% endif %}
+          {% if card.std_treatment is not none %}
+          <div class="metric-row metric-row-subtle">
+            <span class="metric-label">Std (treatment)</span>
+            <span class="metric-value">{{ "%.3f" | format(card.std_treatment) }}</span>
+          </div>
+          {% endif %}
+          {% set c = card.control_value if card.control_value is not none else 0 %}
+          {% set t = card.treatment_value if card.treatment_value is not none else 0 %}
+          {% set max_val = (c if c > t else t) %}
+          {% if max_val <= 0 %}
+            {% set max_val = 1 %}
+          {% endif %}
+
+          <div class="metric-row">
+            <span class="metric-label">Lift</span>
+            <span class="metric-value">{{ "%.1f" | format(card.lift * 100) }}%</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">P value</span>
+            <span class="metric-value">{{ "%.3f" | format(card.p_value) }}</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label" title="95% confidence interval for (treatment − control) difference">
+              95% CI (treat − control)
+            </span>
+            <span class="metric-value">
+              {% if card.ci_diff_lower is not none and card.ci_diff_upper is not none %}
+                [{{ "%.3f" | format(card.ci_diff_lower) }}, {{ "%.3f" | format(card.ci_diff_upper) }}]
+              {% else %}
+                n/a
+              {% endif %}
+            </span>
+          </div>
+          <div class="metric-visual-block">
+            {% if card.ci95_control is not none or card.ci95_treatment is not none %}
+            <div class="metric-ci-track">
+              {% if max_val <= 0 %}
+                {% set max_val = 1 %}
+              {% endif %}
+              {% if card.ci95_control is not none %}
+                {% set c_low = c - card.ci95_control %}
+                {% set c_high = c + card.ci95_control %}
+                {% set c_low_n = 0 if c_low < 0 else c_low %}
+                {% set c_high_n = max_val if c_high > max_val and max_val > 0 else c_high %}
+                {% set c_low_pos = (c_low_n / max_val * 100) %}
+                {% set c_high_pos = (c_high_n / max_val * 100) %}
+                <div class="metric-ci-band metric-ci-band-control" style="left: {{ c_low_pos }}%; right: {{ 100 - c_high_pos }}%"></div>
+                <div class="metric-ci-dot metric-ci-dot-control" style="left: {{ c / max_val * 100 }}%"></div>
+              {% endif %}
+              {% if card.ci95_treatment is not none %}
+                {% set t_low = t - card.ci95_treatment %}
+                {% set t_high = t + card.ci95_treatment %}
+                {% set t_low_n = 0 if t_low < 0 else t_low %}
+                {% set t_high_n = max_val if t_high > max_val and max_val > 0 else t_high %}
+                {% set t_low_pos = (t_low_n / max_val * 100) %}
+                {% set t_high_pos = (t_high_n / max_val * 100) %}
+                <div class="metric-ci-band metric-ci-band-treatment" style="left: {{ t_low_pos }}%; right: {{ 100 - t_high_pos }}%"></div>
+                <div class="metric-ci-dot metric-ci-dot-treatment" style="left: {{ t / max_val * 100 }}%"></div>
+              {% endif %}
+            </div>
+            {% endif %}
+            {% if card.std_control is not none or card.std_treatment is not none %}
+            <div class="metric-std-track">
+              {% set c = card.control_value if card.control_value is not none else 0 %}
+              {% set t = card.treatment_value if card.treatment_value is not none else 0 %}
+              {% set max_val = (c if c > t else t) %}
+              {% if max_val <= 0 %}
+                {% set max_val = 1 %}
+              {% endif %}
+              {% if card.std_control is not none %}
+                {% set c_pos = (c / max_val * 100) %}
+                <div class="metric-std-whisker metric-std-whisker-control" style="left: {{ c_pos }}%"></div>
+              {% endif %}
+              {% if card.std_treatment is not none %}
+                {% set t_pos = (t / max_val * 100) %}
+                <div class="metric-std-whisker metric-std-whisker-treatment" style="left: {{ t_pos }}%"></div>
+              {% endif %}
+            </div>
+            {% endif %}
+            <div class="metric-bars">
+              {% if max_val > 0 %}
+                {% set c_width = (c / max_val * 100) %}
+                {% set t_width = (t / max_val * 100) %}
+              {% else %}
+                {% set c_width = 0 %}
+                {% set t_width = 0 %}
+              {% endif %}
+              <div class="metric-bar metric-bar-control" style="width: {{ c_width }}%"></div>
+              <div class="metric-bar metric-bar-treatment" style="width: {{ t_width }}%"></div>
+            </div>
+            <div class="metric-ci-ticks metric-ci-ticks-bottom metric-ci-ticks-box">
+              <span class="metric-ci-tick">0</span>
+              <span class="metric-ci-tick">{{ "%.2f" | format(max_val) }}</span>
+            </div>
+          </div>
+        </div>
+        <footer class="metric-card-footer">
+          <span class="metric-footnote">
+            {% if card.status == 'green' and card.lift >= 0 %}
+              Decision: reject H₀; treatment is significantly better than control
+              (p = {{ "%.3f" | format(card.p_value) }} < α = {{ card.alpha }}).
+            {% elif card.status == 'red' and card.lift < 0 %}
+              Decision: reject H₀; treatment is significantly worse than control
+              (p = {{ "%.3f" | format(card.p_value) }} < α = {{ card.alpha }}).
+            {% else %}
+              Decision: cannot reject H₀ for this metric
+              (p = {{ "%.3f" | format(card.p_value) }} ≥ α = {{ card.alpha }}).
+            {% endif %}
+
+            {% if card.ci_diff_lower is not none and card.ci_diff_upper is not none %}
+              95% CI (treat − control):
+              [{{ "%.3f" | format(card.ci_diff_lower) }}, {{ "%.3f" | format(card.ci_diff_upper) }}].
+            {% endif %}
+
+            <button type="button" class="metric-explain-link" onclick="openStatExplainModal(event)">
+              Explain more
+            </button>
+          </span>
+        </footer>
+      </article>
+    {% endfor %}
+  </section>
+  {% endif %}
+</div>

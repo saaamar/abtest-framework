@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Copilot Studio – Financial Planning Advisor</title>
+  <style>
+    :root {
+      --bg-page: #f5f5f5;
+      --bg-shell: #ffffff;
+      --bg-shell-alt: #f3f2f1;
+      --border-subtle: #e1dfdd;
+      --border-strong: #c8c6c4;
+      --text-main: #201f1e;
+      --text-muted: #605e5c;
+      --accent: #0f6cbd;
+      --accent-soft: #e6f2fb;
+      --danger: #a4262c;
+      --success: #107c10;
+      --shadow-soft: 0 1px 3px rgba(0,0,0,0.1);
+      --radius: 4px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg-page);
+      color: var(--text-main);
+    }
+
+    .app-shell {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* Top bar ---------------------------------------------------- */
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-shell);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 6px 16px;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .product-logo {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      background: linear-gradient(135deg,#00a6f2,#0078d4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .product-name {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .env-pill {
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-shell-alt);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .user-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #ffd2b3;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    /* Layout: sidebar + main ------------------------------------- */
+
+    .body-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      width: 60px;
+      background: var(--bg-shell);
+      border-right: 1px solid var(--border-subtle);
+      padding: 8px 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sidebar-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .sidebar-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    .sidebar-icon.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .sidebar-bottom {
+      margin-bottom: 16px;
+    }
+
+    .main {
+      flex: 1;
+      padding: 16px 32px;
+      overflow: auto;
+    }
+
+    /* Main header row (title + actions) -------------------------- */
+
+    .main-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .breadcrumbs {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .page-title {
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn {
+      font-size: 13px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border-strong);
+      padding: 4px 12px;
+      background: #fff;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .btn-primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-icon-only {
+      padding: 4px;
+      width: 28px;
+      justify-content: center;
+    }
+
+    .btn:hover {
+      box-shadow: var(--shadow-soft);
+    }
+
+    /* Content cards ---------------------------------------------- */
+
+    .card {
+      background: var(--bg-shell);
+      border-radius: var(--radius);
+      border: 1px solid var(--border-subtle);
+      box-shadow: var(--shadow-soft);
+      padding: 16px 20px;
+      margin-bottom: 16px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .card-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .badge-pill {
+      display: inline-flex;
+      align-items: center;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-shell-alt);
+      color: var(--text-muted);
+      gap: 4px;
+    }
+
+    .edit-link {
+      font-size: 12px;
+      color: var(--accent);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Details row at top ----------------------------------------- */
+
+    .details-row {
+      display: grid;
+      grid-template-columns: minmax(0, 3fr) minmax(0, 4fr) minmax(0, 2fr);
+      gap: 12px;
+    }
+
+    .details-block-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+    }
+
+    .details-name {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .icon-bank {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #107c10;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .details-name-text {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .details-description {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .details-response {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* Analytics row ---------------------------------------------- */
+
+    .analytics-row {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0,1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .analytics-card {
+      padding: 12px 14px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-shell);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+    }
+
+    .analytics-label {
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .analytics-main {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .analytics-value {
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .analytics-trend {
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .trend-down {
+      color: var(--danger);
+    }
+
+    .trend-up {
+      color: var(--success);
+    }
+
+    .chip-link {
+      font-size: 11px;
+      border-radius: 999px;
+      border: 1px solid var(--border-subtle);
+      padding: 2px 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Split layout: Instructions / Knowledge --------------------- */
+
+    .split-row {
+      display: grid;
+      grid-template-columns: minmax(0,3fr) minmax(0,2.4fr);
+      gap: 16px;
+      margin-top: 8px;
+    }
+
+    .instructions-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      font-size: 12px;
+    }
+
+    .instructions-body {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text-main);
+    }
+
+    .pill-file {
+      font-size: 11px;
+      border-radius: 999px;
+      padding: 2px 8px;
+      background: var(--bg-shell-alt);
+      border: 1px solid var(--border-subtle);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: 4px;
+    }
+
+    .instructions-list {
+      margin-top: 12px;
+      padding-left: 20px;
+      font-size: 13px;
+    }
+
+    .instructions-list li {
+      margin-bottom: 4px;
+    }
+
+    .small-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border-radius: 999px;
+      padding: 1px 8px;
+      font-size: 10px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-shell-alt);
+    }
+
+    .saved-indicator {
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Knowledge panel ------------------------------------------- */
+
+    .knowledge-row {
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .knowledge-list {
+      margin-top: 8px;
+      border-top: 1px solid var(--border-subtle);
+      padding-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--text-main);
+    }
+
+    .knowledge-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .knowledge-icon {
+      width: 18px;
+      height: 18px;
+      border-radius: 3px;
+      background: #d13438;
+    }
+
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+    }
+
+    .toggle-switch {
+      width: 32px;
+      height: 16px;
+      border-radius: 999px;
+      background: #0078d4;
+      position: relative;
+    }
+
+    .toggle-switch::after {
+      content: "";
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      background: #fff;
+      border-radius: 50%;
+      top: 2px;
+      left: 18px;
+    }
+
+    .link {
+      color: var(--accent);
+      cursor: pointer;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- Top header bar -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="product-logo">C</div>
+      <div class="product-name">Copilot Studio</div>
+    </div>
+    <div class="topbar-right">
+      <div class="env-pill">
+        <span>Environment</span>
+        <strong>Prod environment</strong>
+      </div>
+      <div class="user-avatar">MD</div>
+    </div>
+  </header>
+
+  <div class="body-layout">
+    <!-- Left sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-icon active">🏠</div>
+        <div class="sidebar-icon">💬</div>
+        <div class="sidebar-icon">🧩</div>
+        <div class="sidebar-icon">⚙️</div>
+      </div>
+      <div class="sidebar-bottom">
+        <div class="sidebar-icon">⋯</div>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main">
+
+      <!-- Header -->
+      <div class="main-header">
+        <div>
+          <div class="breadcrumbs">Agents / Financial Planning Advisor</div>
+          <div class="page-title">Financial Planning Advisor</div>
+        </div>
+        <div class="header-actions">
+          <button class="btn">Test</button>
+          <button class="btn">Settings</button>
+          <button class="btn-primary">Publish</button>
+        </div>
+      </div>
+
+      <!-- Details + analytics card -->
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Details</div>
+          </div>
+          <div class="edit-link">✏️ Edit</div>
+        </div>
+
+        <div class="details-row">
+          <div>
+            <div class="details-block-label">Name</div>
+            <div class="details-name">
+              <div class="icon-bank">🏦</div>
+              <div class="details-name-text">Financial Planning Advisor</div>
+            </div>
+          </div>
+          <div>
+            <div class="details-block-label">Description</div>
+            <div class="details-description">
+              This is the financial planning advisor. Use it when customers want plans to achieve their financial goals.
+            </div>
+          </div>
+          <div>
+            <div class="details-block-label">Response model</div>
+            <div class="details-response">Default (GPT-4o)</div>
+          </div>
+        </div>
+
+        <!-- Analytics cards -->
+        <div class="analytics-row">
+          <div class="analytics-card">
+            <div class="analytics-label">
+              Total sessions
+              <span title="Info">ⓘ</span>
+            </div>
+            <div class="analytics-main">
+              <span class="analytics-value">20,356</span>
+              <span class="analytics-trend trend-down">▼ 5%</span>
+            </div>
+          </div>
+
+          <div class="analytics-card">
+            <div class="analytics-label">
+              Engagement
+              <span title="Info">ⓘ</span>
+            </div>
+            <div class="analytics-main">
+              <span class="analytics-value">95%</span>
+              <span class="analytics-trend trend-up">▲ 8%</span>
+            </div>
+          </div>
+
+          <div class="analytics-card">
+            <div class="analytics-label">
+              Satisfaction score
+              <span title="Info">ⓘ</span>
+            </div>
+            <div class="analytics-main">
+              <span class="analytics-value">3/5</span>
+              <span class="analytics-trend trend-up">▲ 1</span>
+            </div>
+          </div>
+
+          <div class="analytics-card">
+            <div class="analytics-label">
+              Evaluations
+              <span title="Info">ⓘ</span>
+            </div>
+            <div class="analytics-main">
+              <span class="analytics-value">575</span>
+            </div>
+            <div class="analytics-label">
+              Failure tests
+              <span class="analytics-trend trend-up">36 ▲ 8%</span>
+            </div>
+            <div class="analytics-label">
+              Pass rate
+              <span class="analytics-trend trend-up">72% ▲ 18%</span>
+            </div>
+          </div>
+          
+            <div>
+              <button class="btn" type="button" onclick="window.location.href='{{ url_for('setup_experiment') }}'">
+                ab <strong>Run experiment</strong>
+              </button>
+              <button class="btn" type="button" onclick="window.location.href='{{ url_for('results') }}'">Open Experiment</button>
+            </div>
+        </div>
+      </section>
+
+      <!-- Instructions + Knowledge split -->
+      <div class="split-row">
+        <!-- Instructions -->
+        <section class="card">
+          <div class="instructions-header">
+            <div class="card-title">Instructions</div>
+            <div class="saved-indicator">
+              <span>Saved</span> ⟳
+            </div>
+          </div>
+
+          <div class="instructions-body">
+            <p>
+              Always follow Contoso Bank’s
+              <span class="pill-file">📄 Code of conduct.docx</span>
+            </p>
+
+            <p style="margin-top:10px;">
+              <span class="small-tag">
+                When a record is created
+              </span>
+              interpret it as a planning request and take the following steps to help the customer:
+            </p>
+
+            <ol class="instructions-list">
+              <li>Ask for the customers name and store it in this variable <strong>User Name</strong> (String).</li>
+              <li>Ask questions to understand the user’s current financial situation.</li>
+              <li>Supplement information provided with data from <span class="small-tag">👤 User Accounts</span>.</li>
+            </ol>
+          </div>
+        </section>
+
+        <!-- Knowledge -->
+        <section class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Knowledge</div>
+              <div class="card-subtitle">
+                Add data, files, and other resources to inform and improve AI-generated responses.
+              </div>
+            </div>
+            <button class="btn">+ Add</button>
+          </div>
+
+          <div class="knowledge-row">
+            <div><strong>Web search</strong></div>
+            <div>Let your agent search all public websites. <span class="link">Learn more</span></div>
+            <div style="margin-top:6px;">
+              <span class="toggle">
+                <span class="toggle-switch"></span>
+                Enabled
+              </span>
+            </div>
+
+            <div class="knowledge-list">
+              <div class="knowledge-item">
+                <div class="knowledge-icon"></div>
+                <div>Contoso IT – Knowledge Articles</div>
+              </div>
+              <div class="knowledge-item">
+                <div class="knowledge-icon"></div>
+                <div>Device Assignment Policy 2024.pdf</div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+    </main>
+  </div>
+</div>
+</body>
+</html>

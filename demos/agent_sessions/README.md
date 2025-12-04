@@ -1,6 +1,6 @@
 # Agent Sessions Demos
 
-This folder contains demos that use the A/B testing framework on JSON agent-session logs under `data/agent_data` (`Sessions 11_*.json`). Each demo replays a month of data as if it were arriving day by day.
+This folder contains demos that use the A/B testing framework on JSON agent-session logs under `data/agent_data` (`Sessions 2025_11_*.json`). Each demo replays a month of data as if it were arriving day by day.
 
 All scripts rely on `load_agent_sessions` and `summarize_agent_sessions` from `agent_sessions_loader.py` to normalize the JSON into a tabular format with two key per-session metrics:
 

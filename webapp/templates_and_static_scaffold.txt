@@ -1,0 +1,754 @@
+Below are the template and CSS scaffolds to be split into files:
+
+1) webapp/templates/layout.html
+--------------------------------
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Agent A/B Experiments</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body class="app-body">
+  <div class="app-root">
+    <header class="app-header">
+      <div class="app-header-left">
+        <div class="app-logo-circle">A/B</div>
+        <div class="app-title-group">
+          <div class="app-title">AI Agent A/B Experiments</div>
+          <div class="app-subtitle">Plan and monitor AI agent rollouts</div>
+        </div>
+      </div>
+      <div class="app-header-right">
+        {% if today %}
+          <div class="today-picker">
+            <form method="get" action="{{ url_for('results') }}">
+              <label for="today-input">Today</label>
+              <input id="today-input" type="date" name="date" value="{{ today }}">
+              <button type="submit" class="btn btn-ghost">Go</button>
+            </form>
+          </div>
+        {% endif %}
+        <span class="env-pill">Demo</span>
+        <div class="user-avatar">SC</div>
+      </div>
+    </header>
+
+    <main class="main-shell">
+      <aside class="agents-panel">
+        <div class="agents-header">Agents</div>
+        <div class="agent-card agent-card-selected">
+          <div class="agent-name">Original</div>
+          <div class="agent-model">model: gpt-4.1</div>
+          <div class="agent-instructions">
+            Default production assistant answering customer questions.
+          </div>
+        </div>
+        <div class="agent-card">
+          <div class="agent-name">B agent</div>
+          <div class="agent-model">model: gpt-4.1-mini</div>
+          <div class="agent-instructions">
+            Experimental agent optimized for higher quality and faster resolution.
+          </div>
+        </div>
+      </aside>
+
+      <section class="main-panel">
+        {% include content_template %}
+      </section>
+    </main>
+  </div>
+</body>
+</html>
+
+2) webapp/templates/starter.html
+--------------------------------
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Agent A/B Experiments</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body class="starter-body">
+  <div class="app-root">
+    <header class="app-header">
+      <div class="app-header-left">
+        <div class="app-logo-circle">A/B</div>
+        <div class="app-title-group">
+          <div class="app-title">AI Agent A/B Experiments</div>
+          <div class="app-subtitle">Plan and monitor AI agent rollouts</div>
+        </div>
+      </div>
+      <div class="app-header-right">
+        <span class="env-pill">Demo</span>
+        <div class="user-avatar">SC</div>
+      </div>
+    </header>
+
+    <main class="starter-main">
+      <section class="starter-left">
+        <section class="starter-summary-card">
+          <div class="summary-title">Experiment overview</div>
+          <div class="summary-text">
+            Compare your existing support agent with a new B agent focused on
+            higher answer quality and faster resolution.
+          </div>
+          <ul class="summary-list">
+            <li>Channel: Web chat</li>
+            <li>Traffic split: 50 / 50</li>
+            <li>Audience: All signed-in users</li>
+          </ul>
+        </section>
+
+        <section class="starter-metrics-strip">
+          <div class="metric-tile metric-tile-green">
+            <div class="metric-label">Quality</div>
+            <div class="metric-main">4.2 / 5</div>
+            <div class="metric-delta">+8% vs. baseline</div>
+          </div>
+          <div class="metric-tile metric-tile-green">
+            <div class="metric-label">Resolution</div>
+            <div class="metric-main">73%</div>
+            <div class="metric-delta">+5 pts vs. baseline</div>
+          </div>
+          <div class="metric-tile metric-tile-neutral">
+            <div class="metric-label">CSAT</div>
+            <div class="metric-main">4.6 / 5</div>
+            <div class="metric-delta">–0.2 pts</div>
+          </div>
+        </section>
+      </section>
+
+      <section class="starter-right">
+        <section class="starter-hero-card">
+          <div class="hero-header">
+            <div class="hero-title">Plan your AI agent experiment</div>
+            <div class="hero-subtitle">
+              Use controlled A/B experiments to validate new prompts and models
+              before rolling them out to all customers.
+            </div>
+          </div>
+
+          <div class="hero-kpi-row">
+            <div class="hero-kpi-card">
+              <div class="hero-kpi-label">Primary metric</div>
+              <div class="hero-kpi-main">Quality score</div>
+              <div class="hero-kpi-sub">Target uplift: +8%</div>
+            </div>
+            <div class="hero-kpi-card">
+              <div class="hero-kpi-label">Resolution rate</div>
+              <div class="hero-kpi-main">73%</div>
+              <div class="hero-kpi-sub">Goal: +5 pts</div>
+            </div>
+            <div class="hero-kpi-card">
+              <div class="hero-kpi-label">Expected duration</div>
+              <div class="hero-kpi-main">14 days</div>
+              <div class="hero-kpi-sub">Based on recent traffic</div>
+            </div>
+          </div>
+
+          <div class="hero-footer">
+            <button class="btn btn-primary run-experiment-btn"
+                    type="button"
+                    onclick="window.location.href='{{ url_for('setup_experiment') }}'">
+              Run Experiment
+            </button>
+            <button class="btn btn-ghost" type="button">
+              View assumptions
+            </button>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
+
+3) webapp/templates/form.html
+-----------------------------
+<div class="experiment-setup-root">
+  <section class="setup-header">
+    <div class="setup-title-group">
+      <h1 class="setup-title">Configure your A/B experiment</h1>
+      <p class="setup-subtitle">
+        Select a primary metric and additional metrics, then calculate the
+        sample size and duration before starting the experiment.
+      </p>
+    </div>
+  </section>
+
+  <section class="setup-main-grid">
+    <div class="setup-form-panel">
+      <h2 class="panel-title">Experiment parameters</h2>
+
+      <form method="post" class="setup-form">
+        <div class="form-row">
+          <label for="primary-metric" class="form-label">Primary metric</label>
+          <select id="primary-metric" name="primary_metric" class="form-select">
+            <option value="quality_ratio" {% if primary_metric == 'quality_ratio' %}selected{% endif %}>Quality ratio</option>
+            <option value="resolved_ratio" {% if primary_metric == 'resolved_ratio' %}selected{% endif %}>Resolved ratio</option>
+          </select>
+          <p class="form-helper">
+            Used for sizing the experiment and primary decision-making.
+          </p>
+        </div>
+
+        <div class="form-row">
+          <label class="form-label">Additional metrics</label>
+          <div class="multi-select-metrics">
+            <label class="metric-checkbox">
+              <input type="checkbox" name="metrics" value="quality_ratio"
+                     {% if 'quality_ratio' in selected_metrics %}checked{% endif %}>
+              <span>Quality ratio</span>
+            </label>
+            <label class="metric-checkbox">
+              <input type="checkbox" name="metrics" value="resolved_ratio"
+                     {% if 'resolved_ratio' in selected_metrics %}checked{% endif %}>
+              <span>Resolved ratio</span>
+            </label>
+            <label class="metric-checkbox">
+              <input type="checkbox" name="metrics" value="csat"
+                     {% if 'csat' in selected_metrics %}checked{% endif %}>
+              <span>CSAT</span>
+            </label>
+          </div>
+          <p class="form-helper">
+            These metrics are tracked as soft monitoring signals. Guardrail status
+            can be configured but is not enforced in this demo.
+          </p>
+        </div>
+
+        <div class="form-row three-col">
+          <div class="form-field">
+            <label for="alpha" class="form-label">Alpha (significance level)</label>
+            <input id="alpha" name="alpha" type="number" step="0.001" min="0" max="1"
+                   class="form-input" value="{{ alpha }}">
+          </div>
+          <div class="form-field">
+            <label for="power" class="form-label">Power</label>
+            <input id="power" name="power" type="number" step="0.01" min="0" max="1"
+                   class="form-input" value="{{ power }}">
+          </div>
+          <div class="form-field">
+            <label for="mde" class="form-label">MDE (%)</label>
+            <input id="mde" name="mde_percent" type="number" step="0.1" min="0"
+                   class="form-input" value="{{ mde_percent }}">
+          </div>
+        </div>
+
+        <details class="advanced-options">
+          <summary>Advanced options</summary>
+          <div class="form-row two-col">
+            <div class="form-field">
+              <label for="allocation" class="form-label">Traffic split (treatment)</label>
+              <input id="allocation" name="allocation_ratio" type="number"
+                     step="0.05" min="0.1" max="0.9"
+                     class="form-input" value="{{ allocation_ratio }}">
+            </div>
+            <div class="form-field">
+              <label for="daily-volume" class="form-label">Daily traffic per variant (approx.)</label>
+              <input id="daily-volume" name="daily_per_variant" type="number" min="0"
+                     class="form-input" value="{{ daily_per_variant }}">
+            </div>
+          </div>
+        </details>
+
+        <div class="setup-buttons-row">
+          <button type="submit" name="action" value="plan"
+                  class="btn btn-primary">
+            Calculate sample size
+          </button>
+          <button type="submit" name="action" value="start"
+                  class="btn btn-secondary"
+                  {% if not plan_summary %}disabled{% endif %}>
+            Run experiment
+          </button>
+        </div>
+
+        <p class="form-helper">
+          Use “Calculate sample size” to update the plan. Once you are satisfied
+          with the sample size and duration, click “Run experiment” to start.
+        </p>
+      </form>
+    </div>
+
+    <aside class="setup-summary-panel">
+      <h2 class="panel-title">Plan summary</h2>
+
+      {% if plan_summary %}
+      <div class="plan-card primary-plan-card">
+        <div class="plan-card-header">
+          <span class="plan-badge">Primary metric</span>
+          <span class="plan-metric-name">{{ plan_summary.primary_metric }}</span>
+        </div>
+        <div class="plan-card-body">
+          <div class="plan-row">
+            <span class="plan-label">Baseline</span>
+            <span class="plan-value">{{ "%.2f" | format(plan_summary.baseline_rate) }}</span>
+          </div>
+          <div class="plan-row">
+            <span class="plan-label">Target uplift</span>
+            <span class="plan-value">{{ plan_summary.target_uplift_percent }}%</span>
+          </div>
+          <div class="plan-row">
+            <span class="plan-label">Required sample size</span>
+            <span class="plan-value">{{ plan_summary.required_per_variant }} per variant</span>
+          </div>
+          <div class="plan-row">
+            <span class="plan-label">Estimated duration</span>
+            <span class="plan-value">{{ plan_summary.estimated_days }} days</span>
+          </div>
+        </div>
+        <div class="plan-card-footer">
+          <span class="plan-footnote">
+            Based on last 7 days of traffic and current alpha / power.
+          </span>
+        </div>
+      </div>
+      {% else %}
+      <p class="form-helper">
+        Run “Calculate sample size” to generate a plan summary.
+      </p>
+      {% endif %}
+    </aside>
+  </section>
+</div>
+
+4) webapp/templates/results.html
+--------------------------------
+<div class="results-root">
+  <section class="results-header">
+    <h1 class="results-title">Experiment results</h1>
+    {% if experiment %}
+      <p class="results-subtitle">
+        Experiment: {{ experiment.name }} · Status: {{ experiment.status }}
+      </p>
+    {% else %}
+      <p class="results-subtitle">
+        No running experiment found. Configure and start one from the setup screen.
+      </p>
+    {% endif %}
+  </section>
+
+  {% if experiment %}
+  <section class="results-metrics-grid">
+    {% for card in metric_cards %}
+      <article class="metric-card metric-card-{{ card.status }}">
+        <header class="metric-card-header">
+          <div>
+            <div class="metric-name">{{ card.name }}</div>
+            <div class="metric-role">{{ card.role }}</div>
+          </div>
+          <div class="metric-status-pill metric-status-{{ card.status }}">
+            {{ "Good" if card.status == "green" else "Concerning" }}
+          </div>
+        </header>
+        <div class="metric-card-body">
+          <div class="metric-row">
+            <span class="metric-label">Control</span>
+            <span class="metric-value">{{ "%.3f" | format(card.control_value) }}</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">Treatment</span>
+            <span class="metric-value">{{ "%.3f" | format(card.treatment_value) }}</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">Lift</span>
+            <span class="metric-value">{{ "%.1f" | format(card.lift * 100) }}%</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">P value</span>
+            <span class="metric-value">{{ "%.3f" | format(card.p_value) }}</span>
+          </div>
+        </div>
+        <footer class="metric-card-footer">
+          <span class="metric-footnote">
+            Decision rule: reject H₀ when p-value < alpha (alpha = {{ card.alpha }}).
+          </span>
+        </footer>
+      </article>
+    {% endfor %}
+  </section>
+  {% endif %}
+</div>
+
+5) webapp/static/css/styles.css
+-------------------------------
+body.app-body,
+body.starter-body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background-color: #0f172a;
+  color: #e5e7eb;
+}
+
+.app-root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background-color: #020617;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.8);
+}
+
+.app-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.app-logo-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: #1d4ed8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.app-title-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-title {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.app-subtitle {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.app-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.env-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #111827;
+  border: 1px solid #1f2937;
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #1f2937;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+}
+
+/* Starter layout */
+.starter-main {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 24px;
+  padding: 24px;
+}
+
+.starter-summary-card,
+.starter-hero-card,
+.agents-panel,
+.setup-form-panel,
+.setup-summary-panel,
+.metric-card {
+  background-color: #020617;
+  border-radius: 12px;
+  border: 1px solid #1f2937;
+  padding: 16px 18px;
+}
+
+.starter-metrics-strip {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.metric-tile {
+  flex: 0 0 160px;
+  border-radius: 10px;
+  background-color: #030712;
+  border: 1px solid #1f2937;
+  padding: 10px 12px;
+}
+
+.metric-tile-green .metric-main,
+.metric-tile-green .metric-delta {
+  color: #22c55e;
+}
+
+.metric-tile-neutral .metric-main,
+.metric-tile-neutral .metric-delta {
+  color: #e5e7eb;
+}
+
+.hero-kpi-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.hero-kpi-card {
+  flex: 1;
+  background-color: #020617;
+  border-radius: 10px;
+  border: 1px solid #1f2937;
+  padding: 10px 12px;
+}
+
+/* Main shell (Screens 2+3) */
+.main-shell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 24px;
+  padding: 24px;
+}
+
+.agents-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agents-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: #9ca3af;
+  margin-bottom: 4px;
+}
+
+.agent-card {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #1f2937;
+  background: #020617;
+  cursor: default;
+}
+
+.agent-card-selected {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.4);
+}
+
+.agent-name {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.agent-model {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-bottom: 6px;
+}
+
+.agent-instructions {
+  font-size: 12px;
+  color: #d1d5db;
+}
+
+.main-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Setup form */
+.experiment-setup-root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.setup-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 24px;
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.form-row {
+  margin-bottom: 14px;
+}
+
+.form-label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.form-input,
+.form-select {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #374151;
+  background: #020617;
+  color: #e5e7eb;
+  font-size: 13px;
+}
+
+.form-helper {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 4px;
+}
+
+.multi-select-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.metric-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.setup-buttons-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.btn {
+  border-radius: 6px;
+  padding: 6px 12px;
+  border: none;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background-color: #2563eb;
+  color: #f9fafb;
+}
+
+.btn-secondary {
+  background-color: #111827;
+  color: #e5e7eb;
+}
+
+.btn-secondary[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid #1f2937;
+  color: #e5e7eb;
+}
+
+/* Plan cards */
+.plan-card {
+  background-color: #020617;
+  border-radius: 12px;
+  border: 1px solid #1f2937;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.plan-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.plan-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #1f2937;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.plan-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+
+.plan-footnote {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* Results */
+.results-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.metric-card-green {
+  border-color: #16a34a;
+}
+
+.metric-status-pill {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+
+.metric-status-green {
+  background: rgba(22, 163, 74, 0.15);
+  color: #4ade80;
+}
+
+.metric-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.metric-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.metric-role {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 3px;
+}
+
+.metric-footnote {
+  font-size: 11px;
+  color: #9ca3af;
+}

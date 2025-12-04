@@ -70,7 +70,7 @@ Goal: Build a small Flask web app (in `webapp/` under repo root) to plan and mon
       - Implementation note: For now, **only soft monitoring is functionally supported**; guardrail is recorded (label) but not enforced in logic.
 
 - Planning parameters (per planning request, configured on Screen 2):
-  - `alpha ∈ (0,1)` — **UI label:** "Alpha (significance level)"; not called "p-value".
+  - `alpha ∈ (0,1)` — **UI label:** "Alpha (significance level)". Use "Alpha" in setup; reserve "P value" for results.
   - `power ∈ (0,1)` — **UI label:** "Power".
   - `mde_percent > 0` — **UI label:** "MDE (%)"; internally converted to relative lift:
     - `mde_relative = mde_percent / 100`.
@@ -507,6 +507,9 @@ Key style expectations for Screen 2 (in `styles.css`):
 - Plan cards (`.plan-card`, `.primary-plan-card`):
   - Similar to metric cards in results screen, with headers, rows, and footnote text.
   - Primary plan card may have a subtle accent border.
+ - Terminology consistency:
+   - In setup views and plan cards, label the input as "Alpha (significance level)".
+   - In results views and metric cards, label the computed statistic as "P value".
 
 Behavior for Screen 2:
 
@@ -543,7 +546,7 @@ Behavior for Screen 2:
     - Load appropriate JSONs from `data/agent_data/` for that date/window.
     - Compute metrics using shared logic (from `demos/agent_sessions`).
     - Build an `ABTest` and call `analyze()` for primary and additional metrics.
-    - Render metric cards with red/green status.
+    - Render metric cards with the computed **P value** and a clear decision summary (compare p-value vs alpha), alongside red/green status.
 
 ## Backend Usage
 
@@ -562,8 +565,9 @@ Behavior for Screen 2:
     - For each selected metric (primary + additional), call `analyze()` (soft monitoring mode, no multiple-comparison correction initially).
     - Map `analyze()` results to:
       - Effect estimate / lift.
-      - P-value / decision summary.
+      - **P value** (computed) and decision summary.
       - Red/green status for each metric card.
+    - Decision rule: reject H0 when `p-value < alpha`; show alpha in a footnote or tooltip for transparency.
 
 ## UI & UX (Screens 2 and 3)
 

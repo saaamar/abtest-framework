@@ -1,12 +1,17 @@
 # Packages to test
 abexp
+owl_ab_test
+
 # owl-ab-test  # Will check availability
 # py-ab-testing  # Will check availability
 
 # Core dependencies
-numpy>=1.21.0
-pandas>=1.3.0
-scipy>=1.7.0
+numpy
+pandas
+scipy
 
 # Optional: for visualization and reporting
-matplotlib>=3.4.0
+matplotlib
+
+# webapp
+flask

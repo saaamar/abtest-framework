@@ -45,6 +45,7 @@ class ABTest:
         backend: Optional[StatisticalBackend] = None,
         alpha: float = 0.05,
         variants: Optional[List[str]] = None,
+        timestamp: Optional[str] = None,
     ):
         """Initialize A/B test.
         
@@ -62,7 +63,9 @@ class ABTest:
         self.unit_id = unit_id
         self.backend = backend if backend is not None else AbexpBackend()
         self.alpha = alpha
-        self.timestamp = datetime.now().isoformat()
+        # Allow callers (like the webapp) to control the analysis timestamp,
+        # but default to "now" for backward compatibility.
+        self.timestamp = timestamp or datetime.now().isoformat()
         
         # Explicit variants configuration (e.g. ["A", "B"])
         self.variants: Optional[List[str]] = variants

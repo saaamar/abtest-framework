@@ -8,19 +8,19 @@ from typing import Optional
 import pandas as pd
 
 
-def _infer_day_from_filename(path: str, default_year: int = 2024) -> date:
-    """Infer a date from a filename like 'Sessions 11_28.json'."""
+def _infer_day_from_filename(path: str) -> date:
+    """Infer a date from a filename like 'Sessions 2025_11_28.json'.
+
+    Strictly enforces the expected pattern; raises on malformed names.
+    """
     name = os.path.basename(path)
-    # Expect pattern: Sessions MM_DD.json
-    try:
-        base = name.replace("Sessions ", "").replace(".json", "")
-        month_str, day_str = base.split("_")
-        month = int(month_str)
-        day_num = int(day_str)
-        return date(default_year, month, day_num)
-    except Exception:
-        # Fallback: treat entire month as 1st if parsing fails
-        return date(default_year, 1, 1)
+    # Expect pattern: Sessions 2025_MM_DD.json
+    base = name.replace("Sessions ", "").replace(".json", "")
+    year_str, month_str, day_str = base.split("_")
+    year = int(year_str)
+    month = int(month_str)
+    day_num = int(day_str)
+    return date(year, month, day_num)
 
 
 def _create_deterministic_id(day: date, file_name: str, local_index: int) -> str:

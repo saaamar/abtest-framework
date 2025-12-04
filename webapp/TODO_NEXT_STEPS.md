@@ -1,0 +1,19 @@
+- [ ] Split `templates_and_static_scaffold.txt` into real files:
+  - [ ] `webapp/templates/layout.html`
+  - [ ] `webapp/templates/starter.html`
+  - [ ] `webapp/templates/form.html`
+  - [ ] `webapp/templates/results.html`
+  - [ ] `webapp/static/css/styles.css`
+- [ ] Wire templates to `app.py` routes and verify they render without errors
+- [ ] Replace planning placeholders in `setup_experiment` with real logic from:
+  - [ ] `demos/agent_sessions/agent_sessions_loader.py`
+  - [ ] `ab_framework` proportion sample-size helper
+- [ ] Replace results placeholders in `/results` with real:
+  - [ ] metrics loaded from `data/agent_data`
+  - [ ] calls to `ab_framework.ABTest` + `analyze()`
+- [ ] Run manual test:
+  - [ ] Start Flask app (`python webapp/app.py`)
+  - [ ] Navigate to `/`
+  - [ ] Click “Run Experiment” → `/setup_experiment`
+  - [ ] Use “Calculate sample size” then “Run experiment”
+  - [ ] Navigate to `/results` and verify metric cards

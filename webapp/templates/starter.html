@@ -372,6 +372,74 @@
       gap: 4px;
     }
 
+    .analytics-sub-metric {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .sub-metric-label {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .sub-metric-value {
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Experiment actions ----------------------------------------- */
+
+    .experiment-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .analytics-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .analytics-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .analytics-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-experiment {
+      font-size: 13px;
+      border-radius: var(--radius);
+      border: 1px solid #d97706;
+      padding: 4px 12px;
+      background: #f59e0b;
+      color: #fff;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .btn-experiment:hover {
+      background: #d97706;
+      box-shadow: var(--shadow-soft);
+    }
+
     /* Split layout: Instructions / Knowledge --------------------- */
 
     .split-row {
@@ -558,90 +626,132 @@
           <div class="edit-link">✏️ Edit</div>
         </div>
 
-        <div class="details-row">
-          <div>
-            <div class="details-block-label">Name</div>
-            <div class="details-name">
-              <div class="icon-bank">🏦</div>
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <div class="details-name">
+            <div class="icon-bank">🏦</div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <div class="analytics-label">
+                Name
+              </div>
               <div class="details-name-text">Financial Planning Advisor</div>
             </div>
           </div>
           <div>
-            <div class="details-block-label">Description</div>
+            <div class="analytics-label">
+              Description
+            </div>
             <div class="details-description">
               This is the financial planning advisor. Use it when customers want plans to achieve their financial goals.
             </div>
           </div>
           <div>
-            <div class="details-block-label">Response model</div>
+            <div class="analytics-label">
+              Response model
+            </div>
             <div class="details-response">Default (GPT-4o)</div>
           </div>
         </div>
-
-        <!-- Analytics cards -->
-        <div class="analytics-row">
-          <div class="analytics-card">
-            <div class="analytics-label">
-              Total sessions
-              <span title="Info">ⓘ</span>
-            </div>
-            <div class="analytics-main">
-              <span class="analytics-value">20,356</span>
-              <span class="analytics-trend trend-down">▼ 5%</span>
-            </div>
-          </div>
-
-          <div class="analytics-card">
-            <div class="analytics-label">
-              Engagement
-              <span title="Info">ⓘ</span>
-            </div>
-            <div class="analytics-main">
-              <span class="analytics-value">95%</span>
-              <span class="analytics-trend trend-up">▲ 8%</span>
-            </div>
-          </div>
-
-          <div class="analytics-card">
-            <div class="analytics-label">
-              Satisfaction score
-              <span title="Info">ⓘ</span>
-            </div>
-            <div class="analytics-main">
-              <span class="analytics-value">3/5</span>
-              <span class="analytics-trend trend-up">▲ 1</span>
-            </div>
-          </div>
-
-          <div class="analytics-card">
-            <div class="analytics-label">
-              Evaluations
-              <span title="Info">ⓘ</span>
-            </div>
-            <div class="analytics-main">
-              <span class="analytics-value">575</span>
-            </div>
-            <div class="analytics-label">
-              Failure tests
-              <span class="analytics-trend trend-up">36 ▲ 8%</span>
-            </div>
-            <div class="analytics-label">
-              Pass rate
-              <span class="analytics-trend trend-up">72% ▲ 18%</span>
-            </div>
-          </div>
-          
-            <div>
-              <button class="btn" type="button" onclick="window.location.href='{{ url_for('setup_experiment') }}'">
-                ab <strong>Run experiment</strong>
-              </button>
-              <button class="btn" type="button" onclick="window.location.href='{{ url_for('results') }}'">Open Experiment</button>
-            </div>
-        </div>
       </section>
 
-      <!-- Instructions + Knowledge split -->
-      <div class="split-row">
+      <!-- Analytics and Evaluations side-by-side -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
+        
+        <!-- Analytics card -->
+        <section class="card">
+          <div class="card-header">
+            <div class="card-title">Analytics</div>
+          </div>
+
+          <div style="display: flex; gap: 32px; align-items: flex-start;">
+            <div>
+              <div class="analytics-label">
+                Total sessions
+                <span title="Info">ⓘ</span>
+              </div>
+              <div class="analytics-main">
+                <span class="analytics-value">20,356</span>
+                <span class="analytics-trend trend-down">▼ 5%</span>
+              </div>
+            </div>
+
+            <div>
+              <div class="analytics-label">
+                Engagement
+                <span title="Info">ⓘ</span>
+              </div>
+              <div class="analytics-main">
+                <span class="analytics-value">95%</span>
+                <span class="analytics-trend trend-up">▲ 8%</span>
+              </div>
+            </div>
+
+            <div>
+              <div class="analytics-label">
+                Satisfaction score
+                <span title="Info">ⓘ</span>
+              </div>
+              <div class="analytics-main">
+                <span class="analytics-value">3/5</span>
+                <span class="analytics-trend trend-up">▲ 1</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Evaluations card -->
+        <section class="card">
+          <div class="card-header">
+            <div class="card-title">Evaluations</div>
+          </div>
+
+          <div style="display: flex; gap: 32px; align-items: flex-start;">
+            <div>
+              <div class="analytics-label">
+                Total runs
+                <span title="Info">ⓘ</span>
+              </div>
+              <div class="analytics-main">
+                <span class="analytics-value">575</span>
+              </div>
+            </div>
+            
+            <div>
+              <div class="analytics-label">
+                Failure tests
+                <span title="Info">ⓘ</span>
+              </div>
+              <div class="analytics-main">
+                <span class="analytics-value">36</span>
+                <span class="analytics-trend trend-up">▲ 8%</span>
+              </div>
+            </div>
+            
+            <div>
+              <div class="analytics-label">
+                Pass rate
+                <span title="Info">ⓘ</span>
+              </div>
+              <div class="analytics-main">
+                <span class="analytics-value">72%</span>
+                <span class="analytics-trend trend-up">▲ 18%</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+
+            <div style="display: flex; gap: 8px;">
+              <button class="btn" type="button" onclick="window.location.href='{{ url_for('setup_experiment') }}'">
+                <span style="opacity: 0.9;">ab</span> <strong>Run experiment</strong>
+              </button>
+              <button class="btn" type="button" onclick="window.location.href='{{ url_for('results') }}'">
+                🔗 Experiment Open
+              </button>
+            </div>
+
+      <!-- Instructions + Knowledge vertical stack -->
+      <div style="margin-top: 16px;">
         <!-- Instructions -->
         <section class="card">
           <div class="instructions-header">
@@ -685,14 +795,14 @@
           </div>
 
           <div class="knowledge-row">
-            <div><strong>Web search</strong></div>
-            <div>Let your agent search all public websites. <span class="link">Learn more</span></div>
-            <div style="margin-top:6px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <strong>Web search</strong>
               <span class="toggle">
                 <span class="toggle-switch"></span>
                 Enabled
               </span>
             </div>
+            <div>Let your agent search all public websites. <span class="link">Learn more</span></div>
 
             <div class="knowledge-list">
               <div class="knowledge-item">

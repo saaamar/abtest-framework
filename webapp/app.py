@@ -59,7 +59,7 @@ def create_app():
     @app.route("/")
     def starter():
         # Render starter page standalone (without base layout) for testing
-        return render_template("starter.html")
+        return render_template("overview.html")
 
     @app.route("/setup_experiment", methods=["GET", "POST"])
     def setup_experiment():

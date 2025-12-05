@@ -94,7 +94,7 @@ Goal: Build a small Flask web app (in `webapp/` under repo root) to plan and mon
     - `agent_data_service.py`: helpers to load `data/agent_data/` JSONs and compute metrics (reusing logic from `demos/agent_sessions`).
     - `ab_planning_service.py`: helpers that wrap `ab_framework` planning and analysis calls.
   - `templates/`
-    - `starter.html`: **static starter screen** (Screen 1; first screenshot).
+    - `overview.html`: **static starter screen** (Screen 1; first screenshot).
     - `layout.html`: base layout for Screens 2 and 3:
       - Top bar with app title and date controls (for results screen).
       - Left agents sidebar.
@@ -151,11 +151,11 @@ Notes:
   - Loads sessions from `data/agent_data/` for the requested date window.
   - Computes metrics and passes them to `ab_framework.analyze()`.
 
-## Screen 1 — Starter Screen (`starter.html`)
+## Screen 1 — Starter Screen (`overview.html`)
 
 Purpose: Landing page matching the provided screenshot; **all numbers and texts are hardcoded**, only the **“Run Experiment”** button is interactive.
 
-Concrete starter HTML (to be used as `templates/starter.html`):
+Concrete starter HTML (to be used as `templates/overview.html`):
 
 ```html
 <!DOCTYPE html>
@@ -525,7 +525,7 @@ Behavior for Screen 2:
 
 ## Routes
 
-- `GET /` → Render `starter.html` (Screen 1).
+- `GET /` → Render `overview.html` (Screen 1).
 - `GET /setup_experiment` (or `/setup`) → Render `layout.html` with `form.html` embedded (Screen 2).
 - `POST /setup_experiment` (or `/plan`) → Handle both:
   - `action=plan`:
@@ -630,7 +630,7 @@ python webapp\app.py
 
 ## Milestones
 
-1) Implement `starter.html` using the concrete HTML above and hook **Run Experiment** → `/setup_experiment`.
+1) Implement `overview.html` using the concrete HTML above and hook **Run Experiment** → `/setup_experiment`.
 2) Implement `layout.html` + `form.html` for Screen 2 (agents sidebar, primary + multi-select metrics, planning parameters, Calculate sample size / Run experiment buttons).
 3) Implement planning route using builtin `sqlite3` for config and `ab_framework` proportion sample-size helper plus metrics computed from `data/agent_data`.
 4) Implement `results.html` + results routes for Screen 3 with today picker and per-metric cards using `analyze()` and metrics computed on the fly from `data/agent_data`.
@@ -640,7 +640,7 @@ python webapp\app.py
 ## Acceptance Criteria
 
 - Starter screen:
-  - Matches screenshot visually using `starter.html` and CSS.
+  - Matches screenshot visually using `overview.html` and CSS.
   - All values static, only “Run Experiment” navigates to setup screen.
 - Experiment setup:
   - User sees two agents with model name and instructions.

@@ -61,7 +61,7 @@ Below are the template and CSS scaffolds to be split into files:
 </body>
 </html>
 
-2) webapp/templates/starter.html
+2) webapp/templates/overview.html
 --------------------------------
 <!DOCTYPE html>
 <html lang="en">

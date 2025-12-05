@@ -1,6 +1,6 @@
 - [ ] Split `templates_and_static_scaffold.txt` into real files:
   - [ ] `webapp/templates/layout.html`
-  - [ ] `webapp/templates/starter.html`
+  - [ ] `webapp/templates/overview.html`
   - [ ] `webapp/templates/form.html`
   - [ ] `webapp/templates/results.html`
   - [ ] `webapp/static/css/styles.css`

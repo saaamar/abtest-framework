@@ -10,7 +10,7 @@ Goal: Build a small Flask web app (in `webapp/` under repo root) to plan and mon
    - Only interactive element: **“Run Experiment”** button.
    - When clicked → navigates to **Screen 2 — Experiment Setup**.
 
-2. **Screen 2 — Experiment Setup (`form.html` inside `layout.html`)**
+2. **Screen 2 — Experiment Setup (`form.html` inside `configure_experiment.html`)**
    - Agents panel on the left, experiment configuration on the right (reverse engineered from second screenshot; see concrete HTML section below).
    - User selects:
      - Primary metric (single select).
@@ -27,7 +27,7 @@ Goal: Build a small Flask web app (in `webapp/` under repo root) to plan and mon
        - Enabled after a valid plan exists (user is “satisfied” with sample size and duration).
        - When clicked → navigates to **Screen 3 — Experiment Results** with chosen agents and metrics.
 
-3. **Screen 3 — Experiment Results (`results.html` inside `layout.html`)**
+3. **Screen 3 — Experiment Results (`results.html` inside `configure_experiment.html`)**
    - Same overall layout (top bar, left agents panel, right results panel).
    - Top bar includes a **“today picker”** control (date picker or previous/next day).
    - For the selected “today” date:
@@ -95,12 +95,12 @@ Goal: Build a small Flask web app (in `webapp/` under repo root) to plan and mon
     - `ab_planning_service.py`: helpers that wrap `ab_framework` planning and analysis calls.
   - `templates/`
     - `overview.html`: **static starter screen** (Screen 1; first screenshot).
-    - `layout.html`: base layout for Screens 2 and 3:
+    - `configure_experiment.html`: base layout for Screens 2 and 3:
       - Top bar with app title and date controls (for results screen).
       - Left agents sidebar.
       - Right planning/results panel (inner content varies by route).
-    - `form.html`: experiment setup view rendered inside `layout.html` (Screen 2).
-    - `results.html`: experiment results view rendered inside `layout.html` (Screen 3).
+    - `form.html`: experiment setup view rendered inside `configure_experiment.html` (Screen 2).
+    - `results.html`: experiment results view rendered inside `configure_experiment.html` (Screen 3).
   - `static/css/styles.css`:
     - CSS to closely match the screenshots:
       - Dark header/top bar with date control on results screen.
@@ -291,14 +291,14 @@ Behavior:
 - Clicking **“Run Experiment”** performs a navigation to the Experiment Setup route (e.g. `/setup_experiment`).
 - No other dynamic behavior or data calls on this screen.
 
-## Screen 2 — Experiment Setup (`form.html` inside `layout.html`)
+## Screen 2 — Experiment Setup (`form.html` inside `configure_experiment.html`)
 
 Reverse-engineered from the second screenshot; must maintain the same dark theme and panel layout as Screen 1.
 
-Concrete structure for the setup screen content (inside `layout.html`’s right panel, e.g. `block content`):
+Concrete structure for the setup screen content (inside `configure_experiment.html`'s right panel, e.g. `block content`):
 
 ```html
-<!-- form.html (rendered inside layout.html) -->
+<!-- form.html (rendered inside configure_experiment.html) -->
 <div class="experiment-setup-root">
   <!-- Top section: experiment header -->
   <section class="setup-header">
@@ -526,7 +526,7 @@ Behavior for Screen 2:
 ## Routes
 
 - `GET /` → Render `overview.html` (Screen 1).
-- `GET /setup_experiment` (or `/setup`) → Render `layout.html` with `form.html` embedded (Screen 2).
+- `GET /setup_experiment` (or `/setup`) → Render `configure_experiment.html` with `form.html` embedded (Screen 2).
 - `POST /setup_experiment` (or `/plan`) → Handle both:
   - `action=plan`:
     - Read parameters from form.
@@ -571,7 +571,7 @@ Behavior for Screen 2:
 
 ## UI & UX (Screens 2 and 3)
 
-- Top bar in `layout.html` (dark header, app title, date control on results).
+- Top bar in `configure_experiment.html` (dark header, app title, date control on results).
 - Left agents panel common for setup and results:
   - Agents (Original, B) with model name and instructions, styled as cards/list with hover/selected state.
 - Right panel:
@@ -631,7 +631,7 @@ python webapp\app.py
 ## Milestones
 
 1) Implement `overview.html` using the concrete HTML above and hook **Run Experiment** → `/setup_experiment`.
-2) Implement `layout.html` + `form.html` for Screen 2 (agents sidebar, primary + multi-select metrics, planning parameters, Calculate sample size / Run experiment buttons).
+2) Implement `configure_experiment.html` + `form.html` for Screen 2 (agents sidebar, primary + multi-select metrics, planning parameters, Calculate sample size / Run experiment buttons).
 3) Implement planning route using builtin `sqlite3` for config and `ab_framework` proportion sample-size helper plus metrics computed from `data/agent_data`.
 4) Implement `results.html` + results routes for Screen 3 with today picker and per-metric cards using `analyze()` and metrics computed on the fly from `data/agent_data`.
 5) Ensure CSS closely mimics the provided screenshots.

@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Experiment for Financial Planning Advisor</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #fff;
+    }
+
+    .experiment-modal {
+      width: 100%;
+      height: 100%;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      border-bottom: 1px solid #e1e1e1;
+    }
+
+    .modal-title {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #666;
+      padding: 0;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .close-btn:hover {
+      color: #000;
+    }
+
+    .agent-tabs {
+      display: flex;
+      border-bottom: 1px solid #e1e1e1;
+      padding: 0 24px;
+    }
+
+    .agent-tab {
+      padding: 12px 24px;
+      cursor: pointer;
+      border: none;
+      background: none;
+      font-size: 14px;
+      color: #666;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .agent-tab.active {
+      color: #0078d4;
+      border-bottom-color: #0078d4;
+      font-weight: 600;
+    }
+
+    .agent-tab:hover:not(.active) {
+      color: #333;
+    }
+
+    .modal-body {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      padding: 24px;
+      flex: 1;
+      overflow: auto;
+    }
+
+    .left-section, .right-section {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      height: 100%;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .form-group.instructions-group {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .form-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .form-select {
+      padding: 8px 12px;
+      border: 1px solid #d1d1d1;
+      border-radius: 4px;
+      font-size: 14px;
+      background: #fff;
+    }
+
+    .form-textarea {
+      padding: 10px 12px;
+      border: 1px solid #d1d1d1;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: inherit;
+      resize: vertical;
+      flex: 1;
+    }
+
+    .form-input {
+      padding: 8px 12px;
+      border: 1px solid #d1d1d1;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    .info-section {
+      font-size: 13px;
+      line-height: 1.6;
+      color: #555;
+    }
+
+    .info-section strong {
+      color: #333;
+    }
+
+    .info-section ul {
+      margin-left: 20px;
+      margin-top: 8px;
+    }
+
+    .info-section li {
+      margin-bottom: 4px;
+    }
+
+    .help-text {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
+    }
+
+    .metric-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .run-btn {
+      background: #0078d4;
+      color: #fff;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .run-btn:hover:not(:disabled) {
+      background: #006cbd;
+    }
+
+    .run-btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    .calculate-btn {
+      background: #fff;
+      color: #0078d4;
+      border: 1px solid #0078d4;
+      padding: 10px 24px;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .calculate-btn:hover {
+      background: #f0f6ff;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .plan-summary {
+      margin-top: 24px;
+      padding: 20px;
+      background: #f0f6ff;
+      border: 1px solid #0078d4;
+      border-radius: 6px;
+    }
+
+    .plan-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #0078d4;
+      margin-bottom: 16px;
+    }
+
+    .plan-details {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .plan-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 14px;
+    }
+
+    .plan-label {
+      color: #555;
+      font-weight: 500;
+    }
+
+    .plan-value {
+      color: #333;
+      font-weight: 600;
+    }
+
+    .plan-note {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid #d0e5ff;
+      font-size: 13px;
+      color: #107c10;
+      font-weight: 500;
+    }
+
+    .metrics-checkboxes {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      background: #f9f9f9;
+      border-radius: 4px;
+    }
+
+    .metric-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .metric-checkbox input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
+
+    .metric-checkbox span {
+      color: #333;
+    }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="experiment-modal">
+    <div class="modal-header">
+      <h1 class="modal-title">Experiment for Financial Planning Advisor</h1>
+      <button class="close-btn" onclick="window.location.href='{{ url_for('starter') }}'">&times;</button>
+    </div>
+
+    <div class="agent-tabs">
+      <button class="agent-tab" id="tab-original" onclick="switchAgent('original')">Original agent</button>
+      <button class="agent-tab active" id="tab-b" onclick="switchAgent('b')">B Agent</button>
+    </div>
+
+    <form method="POST" action="{{ url_for('setup_experiment') }}">
+      <div class="modal-body">
+        <!-- Left Section: Agent Configuration -->
+        <div class="left-section">
+          <div class="form-group">
+            <label class="form-label">Model</label>
+            <select class="form-select" name="model" id="model-select">
+              <option value="gpt-3.5-nano">GPT-3.5-Nano</option>
+              <option value="gpt-4.1">GPT-4.1</option>
+              <option value="gpt-5" selected>GPT-5</option>
+            </select>
+          </div>
+
+          <div class="form-group instructions-group">
+            <label class="form-label">Instructions</label>
+            <textarea class="form-textarea" name="instructions" id="instructions-textarea" rows="12"># AI Assistant
+
+You are an intelligent AI assistant helping users create, update and manage their AI agents. You are friendly, informative, helpful, yet concise. You have the context of the current chat history.</textarea>
+          </div>
+        </div>
+
+        <!-- Right Section: Test Parameters -->
+        <div class="right-section">
+          <div class="form-group">
+            <label class="form-label">Primary metric to test</label>
+            <select class="form-select" name="primary_metric" id="primary_metric_select">
+              <option value="quality_ratio" {% if primary_metric == 'quality_ratio' %}selected{% endif %}>Quality Ratio</option>
+              <option value="resolved_ratio" {% if primary_metric == 'resolved_ratio' %}selected{% endif %}>Resolved Ratio</option>
+            </select>
+            <p class="help-text">This is the most important thing you'll look at to decide if your test is a success. You might track other metrics, but this one is the main target. Example: If you're testing a new model, your primary metric might be "Answer quality".</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Metric improvement goal</label>
+            <input type="text" class="form-input" name="mde_percent" value="{% if mde_percent %}{{ mde_percent }}{% else %}5{% endif %}" />
+            <p class="help-text">This is the smallest improvement you'd call a win. It's how big a change you want to see in your metric. Example: "We want to see the quality of our AI's response go up by at least 5%."</p>
+          </div>
+
+          <div class="metric-row">
+            <div class="form-group">
+              <label class="form-label">P value</label>
+              <input type="text" class="form-input" name="alpha" value="{% if alpha %}{{ alpha }}{% else %}0.05{% endif %}" />
+              <p class="help-text">This number helps you know if your test results are real or just luck. A smaller P-value means stronger proof that your change made a real difference. 👉 Most people use 0.05 as the standard — meaning you're 95% sure your result is real.</p>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Power</label>
+              <input type="text" class="form-input" name="power" value="{% if power %}{{ power }}{% else %}0.8{% endif %}" />
+              <p class="help-text">This tells you how likely your test is to find a real difference if one exists. Higher power = more confidence in your results. 👉 Most people aim for 80% power, meaning you have a good chance of detecting real change.</p>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Additional metrics (soft monitoring)</label>
+            <div class="metrics-checkboxes">
+              <label class="metric-checkbox">
+                <input type="checkbox" name="metrics" value="quality_ratio" 
+                       {% if primary_metric == 'quality_ratio' %}checked disabled{% elif selected_metrics and 'quality_ratio' in selected_metrics %}checked{% endif %}>
+                <span>Quality Ratio {% if primary_metric == 'quality_ratio' %}(Primary){% endif %}</span>
+              </label>
+              <label class="metric-checkbox">
+                <input type="checkbox" name="metrics" value="resolved_ratio"
+                       {% if primary_metric == 'resolved_ratio' %}checked disabled{% elif selected_metrics and 'resolved_ratio' in selected_metrics %}checked{% endif %}>
+                <span>Resolved Ratio {% if primary_metric == 'resolved_ratio' %}(Primary){% endif %}</span>
+              </label>
+            </div>
+            <p class="help-text">Select additional metrics to track during the experiment. These will be monitored but won't be used for primary decision-making. The primary metric is automatically included.</p>
+          </div>
+
+          <div class="button-row">
+            <button type="submit" name="action" value="plan" class="calculate-btn">Calculate Sample Size</button>
+            <button type="submit" name="action" value="start" class="run-btn" id="run-btn" {% if not plan_summary %}disabled{% endif %}>Run Experiment</button>
+          </div>
+
+          {% if plan_summary %}
+          <div class="plan-summary">
+            <h3 class="plan-title">📊 Sample Size Calculation</h3>
+            <div class="plan-details">
+              <div class="plan-row">
+                <span class="plan-label">Primary metric:</span>
+                <span class="plan-value">{{ plan_summary.primary_metric }}</span>
+              </div>
+              <div class="plan-row">
+                <span class="plan-label">Baseline rate:</span>
+                <span class="plan-value">{{ "%.1f" | format(plan_summary.baseline_rate * 100) }}%</span>
+              </div>
+              <div class="plan-row">
+                <span class="plan-label">Target uplift:</span>
+                <span class="plan-value">{{ "%.1f" | format(plan_summary.target_uplift_percent) }}%</span>
+              </div>
+              <div class="plan-row">
+                <span class="plan-label">Required sample size per variant:</span>
+                <span class="plan-value">{{ plan_summary.required_per_variant }} conversations</span>
+              </div>
+              <div class="plan-row">
+                <span class="plan-label">Daily traffic per variant:</span>
+                <span class="plan-value">~{{ "%.0f" | format(plan_summary.daily_per_variant) }} conversations</span>
+              </div>
+              <div class="plan-row">
+                <span class="plan-label">Estimated duration:</span>
+                <span class="plan-value">~{{ plan_summary.estimated_days }} days</span>
+              </div>
+              <div class="plan-row">
+                <span class="plan-label">Statistical parameters:</span>
+                <span class="plan-value">α={{ plan_summary.alpha }}, power={{ "%.0f" | format(plan_summary.power * 100) }}%</span>
+              </div>
+            </div>
+            <p class="plan-note">✅ These calculations are based on your recent 7-day traffic. Click "Run Experiment" to start the test.</p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    // Agent configurations
+    const agentConfigs = {
+      original: {
+        model: 'gpt-4.1',
+        instructions: `# AI Assistant
+
+You are an intelligent AI assistant helping users create, update and manage their AI agents. You are friendly, informative, helpful, yet concise. You have the context of the current chat history.
+
+## Your Grounding
+- You are grounded in the <AppSchema> which describes the application's structure, pages, and capabilities.
+- You are aware of the user's <Context> which tells you where they are in the app and what they are doing.
+
+## Current Context
+**Mode**: agent (Full-capability assistant with intelligent tool usage)
+**User Role**: editor
+**App Context**: agent-view
+**Current Tab**: Not specified
+**Working with Agent**: Untitled Agent
+
+## Mission
+Help users accomplish their goals efficiently using available tools and best judgment.
+
+## Mode: agent
+**What you CAN do:**
+Use appropriate tools for this mode`
+      },
+      b: {
+        model: 'gpt-5',
+        instructions: `# Enhanced AI Assistant
+
+You are an advanced AI assistant helping users create, update and manage their AI agents. You are exceptionally friendly, highly informative, and extremely helpful while maintaining conciseness. You leverage the full context of the current chat history to provide personalized assistance.
+
+## Your Grounding
+- You are grounded in the <AppSchema> which describes the application's structure, pages, and capabilities.
+- You are aware of the user's <Context> which tells you where they are in the app and what they are doing.
+
+## Current Context
+**Mode**: agent (Full-capability assistant with intelligent tool usage)
+**User Role**: editor
+**App Context**: agent-view
+**Current Tab**: Not specified
+**Working with Agent**: Untitled Agent
+
+## Mission
+Help users accomplish their goals efficiently using available tools and best judgment.
+
+## Mode: agent
+**What you CAN do:**
+Use appropriate tools for this mode
+
+Key improvements:
+- More engaging and personalized responses
+- Better understanding of user intent
+- Proactive suggestions and recommendations`
+      }
+    };
+
+    function switchAgent(agent) {
+      // Update tab styling
+      document.querySelectorAll('.agent-tab').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      document.getElementById('tab-' + agent).classList.add('active');
+
+      // Load agent configuration
+      const config = agentConfigs[agent];
+      if (config) {
+        // Update model
+        const modelSelect = document.getElementById('model-select');
+        if (modelSelect) {
+          modelSelect.value = config.model;
+        }
+
+        // Update instructions
+        const instructionsTextarea = document.getElementById('instructions-textarea');
+        if (instructionsTextarea) {
+          instructionsTextarea.value = config.instructions;
+        }
+      }
+    }
+
+    // Initialize with B Agent config
+    window.addEventListener('DOMContentLoaded', function() {
+      switchAgent('b');
+      updateMetricCheckboxes();
+    });
+
+    // Update metric checkboxes when primary metric changes
+    const primaryMetricSelect = document.getElementById('primary_metric_select');
+    if (primaryMetricSelect) {
+      primaryMetricSelect.addEventListener('change', updateMetricCheckboxes);
+    }
+
+    function updateMetricCheckboxes() {
+      const primaryMetric = document.getElementById('primary_metric_select').value;
+      const checkboxes = document.querySelectorAll('.metric-checkbox input[type="checkbox"]');
+      
+      checkboxes.forEach(checkbox => {
+        const label = checkbox.nextElementSibling;
+        if (checkbox.value === primaryMetric) {
+          checkbox.checked = true;
+          checkbox.disabled = true;
+          label.textContent = label.textContent.replace(' (Primary)', '') + ' (Primary)';
+        } else {
+          checkbox.disabled = false;
+          label.textContent = label.textContent.replace(' (Primary)', '');
+        }
+      });
+    }
+
+    // Before form submission, ensure primary metric is included in metrics
+    document.querySelector('form').addEventListener('submit', function(e) {
+      const primaryMetric = document.getElementById('primary_metric_select').value;
+      const form = e.target;
+      
+      // Check if primary metric checkbox is already present and not disabled
+      let primaryMetricIncluded = false;
+      const checkboxes = form.querySelectorAll('input[name="metrics"]:not(:disabled)');
+      checkboxes.forEach(cb => {
+        if (cb.value === primaryMetric && cb.checked) {
+          primaryMetricIncluded = true;
+        }
+      });
+      
+      // If not included (because it's disabled), add a hidden input
+      if (!primaryMetricIncluded) {
+        const hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.name = 'metrics';
+        hiddenInput.value = primaryMetric;
+        form.appendChild(hiddenInput);
+      }
+    });
+  </script>
+</body>
+</html>
+          <b>p-value:</b> "If there were really no difference between
+          treatment and control, how surprising would this data be?" When
+          the p-value is smaller than our threshold α (for example 0.05),
+          we say the result is statistically significant and reject H0 the
+          "no difference" hypothesis (aka null hypothesis).
+        </p>
+        <p>
+          <b>95% confidence interval (aka CI):</b> The 95% confidence interval for (treatment − control) is a range
+          of effect sizes that are plausible given the data. If the entire
+          interval is above 0, the treatment is likely better. If it is
+          below 0, the treatment is likely worse. If it crosses 0, the
+          data are compatible with "no real difference," and any true
+          effect is likely small and somewhere inside that range.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function openStatExplainModal(event) {
+      if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+      }
+      var modal = document.getElementById('stat-explain-modal');
+      if (modal) {
+        modal.style.display = 'block';
+      }
+    }
+
+    function closeStatExplainModal() {
+      var modal = document.getElementById('stat-explain-modal');
+      if (modal) {
+        modal.style.display = 'none';
+      }
+    }
+  </script>
+</body>
+</html>

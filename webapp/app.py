@@ -16,44 +16,67 @@ def get_db_connection():
     return conn
 
 def init_db():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    db_dir = os.path.dirname(DB_PATH)
+    if db_dir and not os.path.exists(db_dir):
+        os.makedirs(db_dir, exist_ok=True)
+    
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS experiments (
-            id INTEGER PRIMARY KEY,
-            name TEXT,
-            created_at TEXT,
-            status TEXT CHECK(status IN ('planned','running','completed')) NOT NULL,
-            agent_a_id TEXT,
-            agent_b_id TEXT,
-            primary_metric TEXT,
-            alpha REAL,
-            power REAL,
-            mde_relative REAL,
-            allocation_ratio REAL,
-            planned_per_variant INTEGER,
-            planned_days INTEGER
+    
+    try:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS experiments (
+                id INTEGER PRIMARY KEY,
+                name TEXT,
+                created_at TEXT,
+                status TEXT CHECK(status IN ('planned','running','completed')) NOT NULL,
+                agent_a_id TEXT,
+                agent_b_id TEXT,
+                primary_metric TEXT,
+                alpha REAL,
+                power REAL,
+                mde_relative REAL,
+                allocation_ratio REAL,
+                planned_per_variant INTEGER,
+                planned_days INTEGER
+            )
+            """
         )
-        """
-    )
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS experiment_metrics (
-            id INTEGER PRIMARY KEY,
-            experiment_id INTEGER REFERENCES experiments(id) ON DELETE CASCADE,
-            name TEXT,
-            role TEXT CHECK(role IN ('primary','soft_monitoring','guardrail')) NOT NULL
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS experiment_metrics (
+                id INTEGER PRIMARY KEY,
+                experiment_id INTEGER REFERENCES experiments(id) ON DELETE CASCADE,
+                name TEXT,
+                role TEXT CHECK(role IN ('primary','soft_monitoring','guardrail')) NOT NULL
+            )
+            """
         )
-        """
-    )
-    conn.commit()
-    conn.close()
+        conn.commit()
+    except Exception as e:
+        print(f"Error initializing database: {e}")
+        traceback.print_exc()
+    finally:
+        conn.close()
 
 def create_app():
     app = Flask(__name__, template_folder="templates", static_folder="static")
-    init_db()
+    
+    # Initialize database
+    try:
+        init_db()
+        # Verify tables exist
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='experiments'")
+        if not cur.fetchone():
+            print("WARNING: experiments table not found after init_db()")
+        conn.close()
+        print(f"Database initialized successfully at: {DB_PATH}")
+    except Exception as e:
+        print(f"Error during database initialization: {e}")
+        traceback.print_exc()
 
 
     @app.route("/")
@@ -183,7 +206,7 @@ def create_app():
 
             # For action=plan, just re-render setup with plan summary
             return render_template(
-                "layout.html",
+                "configure_experiment.html",
                 content_template="form.html",
                 plan_summary=plan_summary,
                 primary_metric=primary_metric,
@@ -200,7 +223,7 @@ def create_app():
         # Pre-fill baseline traffic using A/A-derived estimate so duration matches demo by default
         baseline_rate, aa_daily_per_variant = get_recent_baseline_and_volume("quality_ratio", days=7)
         return render_template(
-            "layout.html",
+            "configure_experiment.html",
             content_template="form.html",
             plan_summary=None,
             primary_metric="quality_ratio",
@@ -468,12 +491,15 @@ def create_app():
             traceback.print_exc()
             pass
 
+        # Sort metric_cards to show primary metric first
+        metric_cards_sorted = sorted(metric_cards, key=lambda x: (x["role"] != "primary", x["name"]))
+
         return render_template(
-            "layout.html",
-            content_template="results.html",
+            "results.html",
             experiment=exp,
-            metric_cards=metric_cards,
+            metric_cards=metric_cards_sorted,
             today=today_str,
+            today_str=today_str,  # Add today_str for navigator
             day_index=day_index if unique_days else None,
             total_days=total_days,
             current_total_n=current_total_n,

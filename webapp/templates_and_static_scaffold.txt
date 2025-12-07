@@ -1,6 +1,6 @@
 Below are the template and CSS scaffolds to be split into files:
 
-1) webapp/templates/layout.html
+1) webapp/templates/configure_experiment.html
 --------------------------------
 <!DOCTYPE html>
 <html lang="en">

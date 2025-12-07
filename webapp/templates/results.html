@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Experiment Results - Financial Planning Advisor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -179,100 +180,6 @@
     .metric-value {
       font-weight: 600;
       color: #333;
-    }
-
-    .metric-visual-block {
-      margin-top: 16px;
-    }
-
-    .metric-bars {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin: 16px 0;
-    }
-
-    .metric-bar {
-      height: 24px;
-      border-radius: 4px;
-      transition: width 0.3s;
-    }
-
-    .metric-bar-control {
-      background: #0078d4;
-    }
-
-    .metric-bar-treatment {
-      background: #50e6ff;
-    }
-
-    .metric-ci-track {
-      position: relative;
-      height: 32px;
-      margin: 12px 0;
-    }
-
-    .metric-ci-band {
-      position: absolute;
-      height: 8px;
-      top: 12px;
-      opacity: 0.3;
-      border-radius: 4px;
-    }
-
-    .metric-ci-band-control {
-      background: #0078d4;
-    }
-
-    .metric-ci-band-treatment {
-      background: #50e6ff;
-    }
-
-    .metric-ci-dot {
-      position: absolute;
-      width: 12px;
-      height: 12px;
-      top: 10px;
-      margin-left: -6px;
-      border-radius: 50%;
-      border: 2px solid #fff;
-    }
-
-    .metric-ci-dot-control {
-      background: #0078d4;
-    }
-
-    .metric-ci-dot-treatment {
-      background: #50e6ff;
-    }
-
-    .metric-std-track {
-      position: relative;
-      height: 20px;
-      margin: 8px 0;
-    }
-
-    .metric-std-whisker {
-      position: absolute;
-      width: 2px;
-      height: 16px;
-      top: 2px;
-    }
-
-    .metric-std-whisker-control {
-      background: #0078d4;
-    }
-
-    .metric-std-whisker-treatment {
-      background: #50e6ff;
-    }
-
-    .metric-ci-ticks {
-      display: flex;
-      justify-content: space-between;
-      font-size: 11px;
-      color: #999;
-      margin-top: 4px;
     }
 
     .metric-card-footer {
@@ -514,6 +421,61 @@
       color: #333;
       font-weight: 600;
     }
+
+    /* Graph styles - per metric card */
+    .metric-chart-container {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid #e1e1e1;
+    }
+
+    .metric-chart-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #555;
+      margin-bottom: 12px;
+    }
+
+    .metric-canvas-wrapper {
+      position: relative;
+      height: 200px;
+      margin-bottom: 16px;
+    }
+
+    /* SRM Visualization Styles */
+    .srm-visualization-section {
+      margin-top: 32px;
+      padding: 24px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .srm-viz-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 8px;
+    }
+
+    .srm-viz-subtitle {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+
+    .srm-viz-legend {
+      padding: 12px;
+      background: #f8f9fa;
+      border-radius: 6px;
+      border-left: 4px solid #0078d4;
+    }
+
+    .srm-viz-legend p {
+      display: flex;
+      align-items: center;
+    }
   </style>
 </head>
 <body>
@@ -561,18 +523,35 @@
             </p>
             {% if day_index and total_days %}
             <p class="results-subtitle">
-              <strong>Day:</strong>
-              {% if day_index > 7 %}
-                experiment day {{ day_index - 7 }} (data day {{ day_index }} of {{ total_days }})
-              {% else %}
-                A/A warmup (data day {{ day_index }} of {{ total_days }})
-              {% endif %}
+              <strong>Experiment Day:</strong> {{ day_index }} of {{ total_days }}
             </p>
             {% endif %}
             {% if current_total_n is not none %}
             <p class="results-subtitle">
               <strong>Current sample size (primary):</strong>
               ~{{ current_total_n }} {{ primary_unit_label or 'conversations' }}
+            </p>
+            {% endif %}
+            {% if experiment.allocation_ratio is not none %}
+            <p class="results-subtitle">
+              <strong>Traffic split:</strong>
+              {{ "%.0f" | format((1 - experiment.allocation_ratio) * 100) }}% control / {{ "%.0f" | format(experiment.allocation_ratio * 100) }}% treatment
+              {% if experiment.allocation_ratio != 0.5 %}
+                (unequal split)
+              {% endif %}
+            </p>
+            {% endif %}
+            {% if srm_result %}
+            <p class="results-subtitle {% if not srm_result.passed %}results-subtitle-warning{% endif %}">
+              <strong>SRM Check (Sample Ratio Mismatch):</strong>
+              {% if srm_result.passed %}
+                ✅ Passed - Randomization working correctly
+              {% else %}
+                ⚠️ FAILED - {{ srm_result.recommendation }}
+              {% endif %}
+              <button type="button" class="metric-explain-link" onclick="openSrmExplainModal(event)" style="margin-left: 4px;">
+                What is this?
+              </button>
             </p>
             {% endif %}
           </div>
@@ -698,68 +677,19 @@
                 {% endif %}
               </span>
             </div>
-            <div class="metric-visual-block">
-              {% if card.ci95_control is not none or card.ci95_treatment is not none %}
-              <div class="metric-ci-track">
-                {% if max_val <= 0 %}
-                  {% set max_val = 1 %}
-                {% endif %}
-                {% if card.ci95_control is not none %}
-                  {% set c_low = c - card.ci95_control %}
-                  {% set c_high = c + card.ci95_control %}
-                  {% set c_low_n = 0 if c_low < 0 else c_low %}
-                  {% set c_high_n = max_val if c_high > max_val and max_val > 0 else c_high %}
-                  {% set c_low_pos = (c_low_n / max_val * 100) %}
-                  {% set c_high_pos = (c_high_n / max_val * 100) %}
-                  <div class="metric-ci-band metric-ci-band-control" style="left: {{ c_low_pos }}%; right: {{ 100 - c_high_pos }}%"></div>
-                  <div class="metric-ci-dot metric-ci-dot-control" style="left: {{ c / max_val * 100 }}%"></div>
-                {% endif %}
-                {% if card.ci95_treatment is not none %}
-                  {% set t_low = t - card.ci95_treatment %}
-                  {% set t_high = t + card.ci95_treatment %}
-                  {% set t_low_n = 0 if t_low < 0 else t_low %}
-                  {% set t_high_n = max_val if t_high > max_val and max_val > 0 else t_high %}
-                  {% set t_low_pos = (t_low_n / max_val * 100) %}
-                  {% set t_high_pos = (t_high_n / max_val * 100) %}
-                  <div class="metric-ci-band metric-ci-band-treatment" style="left: {{ t_low_pos }}%; right: {{ 100 - t_high_pos }}%"></div>
-                  <div class="metric-ci-dot metric-ci-dot-treatment" style="left: {{ t / max_val * 100 }}%"></div>
-                {% endif %}
+            
+            {% if historical_data and historical_data|length > 0 %}
+            <div class="metric-chart-container">
+              <div class="metric-chart-title">Metric Value Over Time</div>
+              <div class="metric-canvas-wrapper">
+                <canvas id="metricChart_{{ card.name }}"></canvas>
               </div>
-              {% endif %}
-              {% if card.std_control is not none or card.std_treatment is not none %}
-              <div class="metric-std-track">
-                {% set c = card.control_value if card.control_value is not none else 0 %}
-                {% set t = card.treatment_value if card.treatment_value is not none else 0 %}
-                {% set max_val = (c if c > t else t) %}
-                {% if max_val <= 0 %}
-                  {% set max_val = 1 %}
-                {% endif %}
-                {% if card.std_control is not none %}
-                  {% set c_pos = (c / max_val * 100) %}
-                  <div class="metric-std-whisker metric-std-whisker-control" style="left: {{ c_pos }}%"></div>
-                {% endif %}
-                {% if card.std_treatment is not none %}
-                  {% set t_pos = (t / max_val * 100) %}
-                  <div class="metric-std-whisker metric-std-whisker-treatment" style="left: {{ t_pos }}%"></div>
-                {% endif %}
-              </div>
-              {% endif %}
-              <div class="metric-bars">
-                {% if max_val > 0 %}
-                  {% set c_width = (c / max_val * 100) %}
-                  {% set t_width = (t / max_val * 100) %}
-                {% else %}
-                  {% set c_width = 0 %}
-                  {% set t_width = 0 %}
-                {% endif %}
-                <div class="metric-bar metric-bar-control" style="width: {{ c_width }}%"></div>
-                <div class="metric-bar metric-bar-treatment" style="width: {{ t_width }}%"></div>
-              </div>
-              <div class="metric-ci-ticks">
-                <span class="metric-ci-tick">0</span>
-                <span class="metric-ci-tick">{{ "%.2f" | format(max_val) }}</span>
+              <div class="metric-chart-title">P-Value Over Time</div>
+              <div class="metric-canvas-wrapper">
+                <canvas id="pvalueChart_{{ card.name }}"></canvas>
               </div>
             </div>
+            {% endif %}
           </div>
           <footer class="metric-card-footer">
             <span class="metric-footnote">
@@ -787,6 +717,42 @@
         </article>
       {% endfor %}
     </section>
+
+    <!-- SRM Over Time Visualization -->
+    <!-- Debug: srm_history exists: {{ srm_history is defined }}, length: {{ srm_history|length if srm_history else 0 }} -->
+    {% if srm_history and srm_history|length > 0 %}
+    <section class="srm-visualization-section">
+      <h2 class="srm-viz-title">Randomization Quality Over Time (SRM Check)</h2>
+      <p class="srm-viz-subtitle">
+        Tracking the treatment-to-control ratio across experiment days. 
+        A properly functioning randomization should keep the observed ratio close to the configured allocation.
+      </p>
+      
+      <!-- Graph Explanation -->
+      <div style="background: #f8f9fa; border-left: 4px solid #0078d4; padding: 12px 16px; margin: 16px 0; border-radius: 4px;">
+        <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #333;">📊 How to read this graph:</h3>
+        <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #555; line-height: 1.6;">
+          <li><strong>Each dot</strong> represents the <strong>observed treatment-to-control ratio</strong> for a given day (calculated as: # of treatment users ÷ # of control users)</li>
+          <li><strong>The vertical line through each dot</strong> shows the <strong>95% confidence interval</strong> — a range of plausible values for the true ratio based on the observed data</li>
+          <li><strong>The blue dashed line</strong> shows your <strong>configured expected ratio</strong> (e.g., 1.0 for a 50/50 split)</li>
+          <li><strong>Color coding:</strong>
+            <ul style="margin-top: 4px; padding-left: 20px;">
+              <li><span style="color: #28a745; font-weight: 600;">Green dot:</span> The confidence interval <em>includes</em> the expected ratio → randomization looks good ✓</li>
+              <li><span style="color: #dc3545; font-weight: 600;">Red dot:</span> The confidence interval <em>excludes</em> the expected ratio → SRM detected ⚠️</li>
+            </ul>
+          </li>
+        </ul>
+        <p style="margin: 8px 0 0 0; font-size: 12px; font-style: italic; color: #666;">
+          💡 Tip: Confidence intervals get narrower over time as more data accumulates, making it easier to detect even small deviations from the expected ratio.
+        </p>
+      </div>
+      
+      <div class="chart-container" style="position: relative; height: 400px; margin-top: 20px;">
+        <canvas id="srm-cumulative-chart"></canvas>
+      </div>
+    </section>
+    {% endif %}
+
     {% endif %}
   </div>
 
@@ -817,6 +783,41 @@
     </div>
   </div>
 
+  <!-- SRM Explanation Modal -->
+  <div id="srm-explain-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Understanding SRM (Sample Ratio Mismatch)</h2>
+        <button class="modal-close" onclick="closeSrmExplainModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>
+          <b>What is SRM?</b> SRM (Sample Ratio Mismatch) checks whether your randomization is working correctly by verifying that the actual split of users between control and treatment matches what you expected.
+        </p>
+        <p>
+          <b>Example:</b> If you designed a 50/50 split and got 1000 users, you expect ~500 in each group. If you find 450 in control and 550 in treatment, this mismatch could indicate a problem.
+        </p>
+        <p>
+          <b>Why it matters:</b>
+        </p>
+        <ul style="margin-left: 20px; margin-top: 8px;">
+          <li>If randomization is broken, your experiment results are <b>invalid</b></li>
+          <li>Even if you see statistical significance, you <b>cannot trust it</b></li>
+          <li>Common causes: buggy assignment logic, biased user filtering, technical issues, bot traffic</li>
+        </ul>
+        <p style="margin-top: 12px;">
+          <b>The test:</b> Uses a chi-square test to check if the observed split differs significantly from expected. If p-value < 0.05 → SRM detected → ⚠️ Investigation needed before trusting results.
+        </p>
+        <p style="margin-top: 12px;">
+          <b>✅ Passed:</b> Your randomization is working as expected. Proceed with confidence.
+        </p>
+        <p>
+          <b>⚠️ Failed:</b> Stop and investigate! Don't trust your A/B test results until you fix the randomization issue.
+        </p>
+      </div>
+    </div>
+  </div>
+
   <script>
     function openStatExplainModal(event) {
       if (event) {
@@ -836,11 +837,33 @@
       }
     }
 
+    function openSrmExplainModal(event) {
+      if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+      }
+      var modal = document.getElementById('srm-explain-modal');
+      if (modal) {
+        modal.style.display = 'block';
+      }
+    }
+
+    function closeSrmExplainModal() {
+      var modal = document.getElementById('srm-explain-modal');
+      if (modal) {
+        modal.style.display = 'none';
+      }
+    }
+
     // Close modal when clicking outside
     window.onclick = function(event) {
-      var modal = document.getElementById('stat-explain-modal');
-      if (event.target == modal) {
+      var statModal = document.getElementById('stat-explain-modal');
+      var srmModal = document.getElementById('srm-explain-modal');
+      if (event.target == statModal) {
         closeStatExplainModal();
+      }
+      if (event.target == srmModal) {
+        closeSrmExplainModal();
       }
     }
 
@@ -865,7 +888,7 @@
       }
     }
 
-    // Allow Enter key to trigger jump
+    // Allow Enter key to trigger jump and initialize charts
     document.addEventListener('DOMContentLoaded', function() {
       var dayInput = document.getElementById('jump-day-input');
       var dateInput = document.getElementById('jump-date-input');
@@ -881,6 +904,425 @@
           if (e.key === 'Enter') jumpToDay();
         });
       }
+      
+      // Initialize charts if historical data exists
+      {% if historical_data and historical_data|length > 0 %}
+      // Check if Chart.js is loaded
+      if (typeof Chart === 'undefined') {
+        console.error('Chart.js is not loaded!');
+        return;
+      }
+      
+      // Prepare data from backend
+      const historicalData = {{ historical_data | tojson }};
+      const experimentDays = historicalData.map(d => d.experiment_day);
+      const metricNames = Object.keys(historicalData[0].metrics);
+      
+      console.log('Chart.js version:', Chart.version);
+      console.log('Initializing charts for metrics:', metricNames);
+      console.log('Historical data:', historicalData);
+      
+      // Create charts for each metric card
+      metricNames.forEach((metricName) => {
+        // Chart 1: Metric Value Over Time (Control vs Treatment)
+        const metricCtxEl = document.getElementById(`metricChart_${metricName}`);
+        console.log(`Looking for canvas: metricChart_${metricName}`, metricCtxEl);
+        if (metricCtxEl) {
+          const controlData = historicalData.map(d => d.metrics[metricName]?.control);
+          const treatmentData = historicalData.map(d => d.metrics[metricName]?.treatment);
+          
+          new Chart(metricCtxEl, {
+            type: 'line',
+            data: {
+              labels: experimentDays,
+              datasets: [
+                {
+                  label: 'Control',
+                  data: controlData,
+                  borderColor: '#0078d4',
+                  backgroundColor: '#0078d420',
+                  borderWidth: 2,
+                  pointRadius: 4,
+                  pointHoverRadius: 6,
+                  tension: 0.3,
+                  borderDash: [5, 5]
+                },
+                {
+                  label: 'Treatment',
+                  data: treatmentData,
+                  borderColor: '#50e6ff',
+                  backgroundColor: '#50e6ff20',
+                  borderWidth: 3,
+                  pointRadius: 4,
+                  pointHoverRadius: 6,
+                  tension: 0.3
+                }
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              interaction: {
+                mode: 'index',
+                intersect: false,
+              },
+              plugins: {
+                legend: {
+                  display: true,
+                  position: 'top',
+                  labels: {
+                    usePointStyle: true,
+                    padding: 10,
+                    font: { size: 11 }
+                  }
+                },
+                tooltip: {
+                  callbacks: {
+                    label: function(context) {
+                      return context.dataset.label + ': ' + (context.parsed.y * 100).toFixed(2) + '%';
+                    }
+                  }
+                }
+              },
+              scales: {
+                x: {
+                  title: {
+                    display: true,
+                    text: 'Experiment Day',
+                    font: { size: 12, weight: 'bold' }
+                  },
+                  grid: {
+                    display: true,
+                    color: '#f0f0f0'
+                  }
+                },
+                y: {
+                  title: {
+                    display: true,
+                    text: 'Value',
+                    font: { size: 12, weight: 'bold' }
+                  },
+                  min: function(context) {
+                    const allValues = context.chart.data.datasets.flatMap(ds => ds.data.filter(v => v != null));
+                    const minVal = Math.min(...allValues);
+                    return Math.max(0, minVal - 0.05);
+                  },
+                  max: function(context) {
+                    const allValues = context.chart.data.datasets.flatMap(ds => ds.data.filter(v => v != null));
+                    const maxVal = Math.max(...allValues);
+                    return Math.min(1, maxVal + 0.05);
+                  },
+                  grid: {
+                    display: true,
+                    color: '#f0f0f0'
+                  }
+                }
+              }
+            }
+          });
+        }
+        
+        // Chart 2: P-Value Over Time
+        const pvalueCtxEl = document.getElementById(`pvalueChart_${metricName}`);
+        console.log(`Looking for canvas: pvalueChart_${metricName}`, pvalueCtxEl);
+        if (pvalueCtxEl) {
+          const pvalueData = historicalData.map(d => d.metrics[metricName]?.p_value);
+          const significantPoints = historicalData.map(d => d.metrics[metricName]?.significant ? 'circle' : 'crossRot');
+          
+          new Chart(pvalueCtxEl, {
+            type: 'line',
+            data: {
+              labels: experimentDays,
+              datasets: [
+                {
+                  label: 'P-Value',
+                  data: pvalueData,
+                  borderColor: '#8764b8',
+                  backgroundColor: '#8764b820',
+                  borderWidth: 3,
+                  pointRadius: 5,
+                  pointHoverRadius: 7,
+                  tension: 0.3,
+                  pointStyle: significantPoints
+                }
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              interaction: {
+                mode: 'index',
+                intersect: false,
+              },
+              plugins: {
+                legend: {
+                  display: false
+                },
+                tooltip: {
+                  callbacks: {
+                    label: function(context) {
+                      const pValue = context.parsed.y;
+                      const sig = pValue < 0.05 ? ' ✓ Significant' : ' ✗ Not Significant';
+                      return 'p=' + pValue.toFixed(4) + sig;
+                    }
+                  }
+                }
+              },
+              scales: {
+                x: {
+                  title: {
+                    display: true,
+                    text: 'Experiment Day',
+                    font: { size: 12, weight: 'bold' }
+                  },
+                  grid: {
+                    display: true,
+                    color: '#f0f0f0'
+                  }
+                },
+                y: {
+                  title: {
+                    display: true,
+                    text: 'P-Value',
+                    font: { size: 12, weight: 'bold' }
+                  },
+                  min: 0,
+                  max: function(context) {
+                    const allPValues = context.chart.data.datasets.flatMap(ds => ds.data.filter(v => v != null));
+                    const maxPValue = Math.max(...allPValues);
+                    if (maxPValue < 0.10) {
+                      return 0.15;
+                    } else if (maxPValue < 0.20) {
+                      return 0.25;
+                    } else {
+                      return Math.min(1, maxPValue * 1.2);
+                    }
+                  },
+                  ticks: {
+                    callback: function(value) {
+                      return value.toFixed(2);
+                    }
+                  },
+                  grid: {
+                    display: true,
+                    color: '#f0f0f0'
+                  }
+                }
+              }
+            }
+          });
+        }
+      });
+      {% endif %}
+
+      // Initialize SRM cumulative chart if data exists
+      {% if srm_history and srm_history|length > 0 %}
+      const srmHistory = {{ srm_history | tojson }};
+      const srmCtx = document.getElementById('srm-cumulative-chart');
+      
+      if (srmCtx && srmHistory.length > 0) {
+        console.log('Initializing SRM chart with data:', srmHistory);
+        
+        const srmDays = srmHistory.map(d => d.day);
+        const observedRatios = srmHistory.map(d => d.observed_tc);
+        const ciLower = srmHistory.map(d => d.ci_lower);
+        const ciUpper = srmHistory.map(d => d.ci_upper);
+        const expectedRatio = srmHistory[0].expected_tc;
+        const srmDetected = srmHistory.map(d => d.srm_detected);
+        
+        // Prepare point colors and border colors based on SRM detection
+        const pointColors = srmDetected.map(detected => detected ? '#dc3545' : '#28a745');
+        const pointBorderColors = srmDetected.map(detected => detected ? '#a71d2a' : '#1e7e34');
+        
+        // Error bars: calculate deltas from observed value
+        const errorBarData = srmHistory.map((d, i) => ({
+          x: d.day,
+          y: d.observed_tc,
+          yMin: d.ci_lower,
+          yMax: d.ci_upper
+        }));
+        
+        new Chart(srmCtx, {
+          type: 'line',
+          data: {
+            labels: srmDays,
+            datasets: [
+              {
+                label: 'Observed T/C Ratio',
+                data: observedRatios,
+                borderColor: '#666',
+                backgroundColor: pointColors,
+                pointBackgroundColor: pointColors,
+                pointBorderColor: pointBorderColors,
+                borderWidth: 2,
+                pointRadius: 6,
+                pointHoverRadius: 8,
+                pointBorderWidth: 2,
+                showLine: false,  // Only show points, no connecting line
+                errorBars: errorBarData
+              },
+              {
+                label: 'Expected Ratio (Configured)',
+                data: Array(srmDays.length).fill(expectedRatio),
+                borderColor: '#0078d4',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                pointRadius: 0,
+                borderDash: [5, 5],
+                fill: false
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+              mode: 'index',
+              intersect: false,
+            },
+            plugins: {
+              legend: {
+                display: true,
+                position: 'top',
+                labels: {
+                  usePointStyle: true,
+                  padding: 15,
+                  font: { size: 12 }
+                }
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    const dataIndex = context.dataIndex;
+                    const dataset = context.dataset;
+                    if (dataset.label === 'Observed T/C Ratio') {
+                      const day = srmHistory[dataIndex];
+                      const status = day.srm_detected ? 'SRM DETECTED ⚠️' : 'OK ✓';
+                      return [
+                        `Observed Ratio: ${day.observed_tc.toFixed(3)}`,
+                        `95% CI: [${day.ci_lower.toFixed(3)}, ${day.ci_upper.toFixed(3)}]`,
+                        `Status: ${status}`,
+                        `Sample: ${day.n_treatment}T / ${day.n_control}C (n=${day.n_total})`
+                      ];
+                    } else {
+                      return `Expected: ${context.parsed.y.toFixed(3)}`;
+                    }
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                title: {
+                  display: true,
+                  text: 'Experiment Day',
+                  font: { size: 13, weight: 'bold' }
+                },
+                grid: {
+                  display: true,
+                  color: '#e8e8e8'
+                },
+                ticks: {
+                  stepSize: 1
+                }
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: 'Treatment / Control Ratio',
+                  font: { size: 13, weight: 'bold' }
+                },
+                min: function(context) {
+                  // Find minimum CI bound across all days
+                  const allCILower = ciLower.filter(v => v != null && !isNaN(v));
+                  if (allCILower.length === 0) return 0.8;
+                  
+                  const minCI = Math.min(...allCILower);
+                  const maxCI = Math.max(...ciUpper.filter(v => v != null && !isNaN(v)));
+                  const dataRange = maxCI - minCI;
+                  
+                  // Add 25% margin below, but at least 0.05
+                  const margin = Math.max(dataRange * 0.25, 0.05);
+                  let minValue = minCI - margin;
+                  
+                  // Ensure expected ratio has good visibility (at least 10% space below)
+                  const minFromExpected = expectedRatio * 0.90;
+                  minValue = Math.min(minValue, minFromExpected);
+                  
+                  // Don't go below 0.5 for readability
+                  return Math.max(0.5, minValue);
+                },
+                max: function(context) {
+                  // Find maximum CI bound across all days
+                  const allCIUpper = ciUpper.filter(v => v != null && !isNaN(v));
+                  if (allCIUpper.length === 0) return 1.5;
+                  
+                  const minCI = Math.min(...ciLower.filter(v => v != null && !isNaN(v)));
+                  const maxCI = Math.max(...allCIUpper);
+                  const dataRange = maxCI - minCI;
+                  
+                  // Add 25% margin above, but at least 0.05
+                  const margin = Math.max(dataRange * 0.25, 0.05);
+                  let maxValue = maxCI + margin;
+                  
+                  // Ensure expected ratio has good visibility (at least 10% space above)
+                  const maxFromExpected = expectedRatio * 1.10;
+                  maxValue = Math.max(maxValue, maxFromExpected);
+                  
+                  return maxValue;
+                },
+                grid: {
+                  display: true,
+                  color: '#e8e8e8'
+                },
+                ticks: {
+                  callback: function(value) {
+                    return value.toFixed(2);
+                  }
+                }
+              }
+            }
+          },
+          plugins: [{
+            // Custom plugin to draw error bars
+            id: 'errorBars',
+            afterDatasetsDraw: function(chart) {
+              const ctx = chart.ctx;
+              const meta = chart.getDatasetMeta(0);  // First dataset (observed ratios)
+              
+              meta.data.forEach((point, index) => {
+                const day = srmHistory[index];
+                if (!day) return;
+                
+                const x = point.x;
+                const yMin = chart.scales.y.getPixelForValue(day.ci_lower);
+                const yMax = chart.scales.y.getPixelForValue(day.ci_upper);
+                const yMid = point.y;
+                
+                // Draw vertical line (error bar)
+                ctx.save();
+                ctx.strokeStyle = day.srm_detected ? '#dc3545' : '#28a745';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(x, yMin);
+                ctx.lineTo(x, yMax);
+                ctx.stroke();
+                
+                // Draw caps on error bars
+                const capWidth = 6;
+                ctx.beginPath();
+                ctx.moveTo(x - capWidth, yMin);
+                ctx.lineTo(x + capWidth, yMin);
+                ctx.moveTo(x - capWidth, yMax);
+                ctx.lineTo(x + capWidth, yMax);
+                ctx.stroke();
+                ctx.restore();
+              });
+            }
+          }]
+        });
+      }
+      {% endif %}
     });
   </script>
 </body>

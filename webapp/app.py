@@ -63,19 +63,28 @@ def init_db():
 def create_app():
     app = Flask(__name__, template_folder="templates", static_folder="static")
     
-    # Initialize database
+    # Initialize database - force it to run every time
+    print(f"Initializing database at: {DB_PATH}")
+    init_db()
+    
+    # Verify tables exist
     try:
-        init_db()
-        # Verify tables exist
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='experiments'")
         if not cur.fetchone():
-            print("WARNING: experiments table not found after init_db()")
+            print("❌ WARNING: experiments table not found after init_db()")
+            print("Attempting to recreate database...")
+            conn.close()
+            # Try deleting and recreating
+            if os.path.exists(DB_PATH):
+                os.remove(DB_PATH)
+            init_db()
+        else:
+            print(f"✅ Database verified successfully at: {DB_PATH}")
         conn.close()
-        print(f"Database initialized successfully at: {DB_PATH}")
     except Exception as e:
-        print(f"Error during database initialization: {e}")
+        print(f"❌ Error during database verification: {e}")
         traceback.print_exc()
 
 
@@ -144,6 +153,7 @@ def create_app():
                 "alpha": alpha,
                 "power": power,
                 "daily_per_variant": daily_per_variant,
+                "allocation_ratio": allocation_ratio,
             }
 
             # Logging similar to demos: planning details
@@ -238,8 +248,8 @@ def create_app():
 
     @app.route("/results")
     def results():
-        # Interpret query param as 1-based "experiment day" index, not a real calendar date.
-        # Day 1 = first data day; Day 7 = end of 7-day A/A warmup; Day 8 = experiment day 1.
+        # Experiment days start from day 1 (which is data day 8, after 7-day A/A warmup)
+        # User navigates by experiment day (1, 2, 3...), internally we map to data days (8, 9, 10...)
         from demos.agent_sessions.agent_sessions_loader import load_agent_sessions
 
         df_sessions_all = load_agent_sessions()
@@ -247,8 +257,11 @@ def create_app():
 
         day_param = request.args.get("day")
         date_param = request.args.get("date")
+        
+        # A/A warmup is 7 days (data days 1-7), experiment starts at data day 8
+        AA_WARMUP_DAYS = 7
 
-        # If a specific date is provided, map it to the closest data day index.
+        # If a specific date is provided, map it to the closest experiment day
         if date_param:
             try:
                 from datetime import date as _date
@@ -263,29 +276,44 @@ def create_app():
                             break
                     if chosen is None:
                         chosen = unique_days[-1]
-                    day_index = unique_days.index(chosen) + 1
+                    data_day_index = unique_days.index(chosen) + 1
+                    # Convert to experiment day (data_day 8 = experiment day 1)
+                    experiment_day_index = max(1, data_day_index - AA_WARMUP_DAYS)
                 else:
-                    day_index = 1
+                    experiment_day_index = 1
             except Exception:
-                day_index = len(unique_days)
+                # Default to last experiment day
+                experiment_day_index = max(1, len(unique_days) - AA_WARMUP_DAYS)
         else:
-            # Fall back to explicit day index if provided
+            # Fall back to explicit experiment day if provided
             if day_param is None:
-                day_index = len(unique_days)  # default to last day in data
+                # Default to experiment day 1 (data day 8)
+                experiment_day_index = 1
             else:
                 try:
-                    day_index = int(day_param)
+                    experiment_day_index = int(day_param)
                 except ValueError:
-                    day_index = len(unique_days)
+                    experiment_day_index = 1
 
-        # Clamp to [1, len(unique_days)] and derive selected_day
-        total_days = len(unique_days)
+        # Calculate total experiment days (total data days - warmup days)
+        total_experiment_days = max(0, len(unique_days) - AA_WARMUP_DAYS)
+        
+        # Clamp experiment_day_index to valid range [1, total_experiment_days]
+        if total_experiment_days > 0:
+            experiment_day_index = max(1, min(experiment_day_index, total_experiment_days))
+        else:
+            experiment_day_index = 1
+        
+        # Convert experiment day back to data day for actual data lookup
+        data_day_index = experiment_day_index + AA_WARMUP_DAYS
+        
         if not unique_days:
             selected_day = None
             today_str = "N/A"
         else:
-            day_index = max(1, min(day_index, total_days))
-            selected_day = unique_days[day_index - 1]
+            # Ensure data_day_index is within bounds
+            data_day_index = max(1, min(data_day_index, len(unique_days)))
+            selected_day = unique_days[data_day_index - 1]
             today_str = selected_day.isoformat()
 
         conn = get_db_connection()
@@ -312,6 +340,10 @@ def create_app():
         stop_recommended = False
         # Human-readable label for the randomization unit (e.g. "conversations").
         primary_unit_label = "conversations"
+        
+        # Historical data for graphs: compute metrics for each day from 8 to current
+        historical_data = []
+        srm_history = []  # Track SRM over time for visualization
         if exp and metrics:
             # Load user/variant mapping using a 7-day window ending at selected_day
             df_conv = get_recent_user_variant_df(days=7, end_day=selected_day)
@@ -366,6 +398,18 @@ def create_app():
                     print(abtest_results.summary())
                     print("\nSOFT MONITORING DECISION:")
                     print(abtest_results.decision_soft_monitoring())
+                    
+                    # Extract SRM results and convert numpy types for JSON serialization
+                    srm_result = abtest_results.srm_result if hasattr(abtest_results, 'srm_result') else None
+                    if srm_result:
+                        # Convert numpy types to Python native types
+                        srm_result = {
+                            "passed": bool(srm_result.get("passed", True)),
+                            "p_value": float(srm_result.get("p_value", 1.0)) if srm_result.get("p_value") is not None else None,
+                            "chi2_stat": float(srm_result.get("chi2_stat", 0.0)) if srm_result.get("chi2_stat") is not None else None,
+                            "observed": {k: int(v) for k, v in srm_result.get("observed", {}).items()},
+                            "expected": {k: float(v) for k, v in srm_result.get("expected", {}).items()}
+                        }
 
                     # Map ABTest metric_results into metric_cards for UI.
                     # ABTest uses metric IDs based on the function names defined above:
@@ -434,6 +478,137 @@ def create_app():
                         )
                         print(metric_id, "ci95_control", ci95_control, "ci95_treatment", ci95_treatment)
 
+        # Compute historical metrics for graphing (experiment days 1 through current)
+        if exp and metrics and experiment_day_index and experiment_day_index >= 1:
+            print(f"\n🔄 Computing historical data for days 1 to {experiment_day_index}")
+            for exp_day_idx in range(1, experiment_day_index + 1):
+                hist_data_day_idx = exp_day_idx + AA_WARMUP_DAYS
+                if hist_data_day_idx > len(unique_days):
+                    print(f"  ⏭️ Skipping day {exp_day_idx}: data day {hist_data_day_idx} > {len(unique_days)} total days")
+                    break
+                hist_day = unique_days[hist_data_day_idx - 1]
+                print(f"  📅 Processing day {exp_day_idx} (data day {hist_data_day_idx}, date {hist_day})")
+                
+                # Load data for this specific day
+                df_conv_hist = get_recent_user_variant_df(days=7, end_day=hist_day)
+                print(f"    📊 Loaded {len(df_conv_hist)} conversations from variant mapping")
+                if not df_conv_hist.empty:
+                    df_sessions_hist = df_sessions_all.copy()
+                    if not df_sessions_hist.empty and "day" in df_sessions_hist.columns:
+                        df_sessions_hist = df_sessions_hist[df_sessions_hist["day"] <= hist_day]
+                        df_hist = df_sessions_hist.merge(df_conv_hist, on="conversation_id", how="inner")
+                        df_hist["user_id"] = df_hist["conversation_id"]
+                        print(f"    ✅ Merged data: {len(df_hist)} rows, {len(df_hist['user_id'].unique())} unique users")
+                        
+                        test_hist = ABTest(
+                            name="webapp_historical",
+                            data=df_hist,
+                            variant_col="variant",
+                            unit_id="user_id",
+                            alpha=exp["alpha"],
+                            timestamp=hist_day.isoformat(),
+                        )
+                        
+                        @test_hist.metric(metric_type="proportion", is_primary=True)
+                        def quality_ratio(data):
+                            return data.groupby("user_id")["quality"].max()
+                        
+                        @test_hist.metric(metric_type="proportion")
+                        def resolved_ratio(data):
+                            return data.groupby("user_id")["resolved"].max()
+                        
+                        try:
+                            results_hist = test_hist.analyze(run_srm_check=False, correction=None)
+                            day_data = {"day": exp_day_idx, "experiment_day": exp_day_idx, "metrics": {}}
+                            
+                            for m in metrics:
+                                metric_id = m["name"]
+                                if metric_id in results_hist.metric_results:
+                                    res_hist = results_hist.metric_results[metric_id]
+                                    # Convert numpy types to Python native types for JSON serialization
+                                    day_data["metrics"][metric_id] = {
+                                        "control": float(res_hist["control_value"]) if res_hist["control_value"] is not None else None,
+                                        "treatment": float(res_hist["treatment_value"]) if res_hist["treatment_value"] is not None else None,
+                                        "p_value": float(res_hist["p_value"]) if res_hist["p_value"] is not None else None,
+                                        "significant": bool(res_hist["significant"]) if res_hist["significant"] is not None else False
+                                    }
+                            
+                            historical_data.append(day_data)
+                            
+                            # Calculate SRM statistics for this day
+                            # Debug: Check what variant values exist
+                            variant_counts = df_hist["variant"].value_counts()
+                            print(f"    🔍 Variant distribution: {dict(variant_counts)}")
+                            
+                            # The variant column might use different naming (A/B, control/treatment, original/b_agent)
+                            # Map to control/treatment based on actual values
+                            unique_variants = df_hist["variant"].unique()
+                            if len(unique_variants) == 2:
+                                # Assume alphabetical order: first is control, second is treatment
+                                variant_list = sorted(unique_variants)
+                                control_variant = variant_list[0]
+                                treatment_variant = variant_list[1]
+                                print(f"    🏷️ Mapping: '{control_variant}' -> Control, '{treatment_variant}' -> Treatment")
+                                
+                                n_control = len(df_hist[df_hist["variant"] == control_variant]["user_id"].unique())
+                                n_treatment = len(df_hist[df_hist["variant"] == treatment_variant]["user_id"].unique())
+                            else:
+                                # Fallback to looking for known variant names
+                                n_control = len(df_hist[df_hist["variant"].isin(["control", "A", "original"])]["user_id"].unique())
+                                n_treatment = len(df_hist[df_hist["variant"].isin(["treatment", "B", "b_agent"])]["user_id"].unique())
+                            
+                            n_total = n_control + n_treatment
+                            print(f"    👥 Sample sizes: Control={n_control}, Treatment={n_treatment}, Total={n_total}")
+                            
+                            if n_total > 0 and n_control > 0:
+                                # Observed treatment-to-control ratio
+                                observed_tc = n_treatment / n_control
+                                
+                                # Expected allocation (from experiment config)
+                                allocation_ratio = exp["allocation_ratio"] if exp["allocation_ratio"] is not None else 0.5
+                                expected_tc = allocation_ratio / (1 - allocation_ratio)
+                                
+                                # Calculate confidence interval for T/C ratio
+                                # Using formula from SRM tool: CI = (x/(n-x)) ± z * sqrt(p / (n*(1-p)^3))
+                                alpha_srm = 0.0005  # Conservative alpha for SRM
+                                z = 3.481  # z_{1-α/2} for α=0.0005
+                                p = allocation_ratio
+                                std_err = math.sqrt(p / (n_total * (1 - p)**3))
+                                ci_lower = observed_tc - z * std_err
+                                ci_upper = observed_tc + z * std_err
+                                
+                                # SRM detected if expected ratio not in CI
+                                srm_detected = not (ci_lower <= expected_tc <= ci_upper)
+                                
+                                srm_history.append({
+                                    "day": exp_day_idx,
+                                    "observed_tc": float(observed_tc),
+                                    "expected_tc": float(expected_tc),
+                                    "ci_lower": float(ci_lower),
+                                    "ci_upper": float(ci_upper),
+                                    "srm_detected": bool(srm_detected),
+                                    "n_control": int(n_control),
+                                    "n_treatment": int(n_treatment),
+                                    "n_total": int(n_total)
+                                })
+                                print(f"    📈 SRM data added: T/C={observed_tc:.3f}, expected={expected_tc:.3f}, SRM={'YES' if srm_detected else 'NO'}")
+                            else:
+                                print(f"    ⚠️ Skipping SRM calculation: n_total={n_total}, n_control={n_control}")
+                        except Exception as e:
+                            print(f"    ❌ Error computing historical data for day {exp_day_idx}: {e}")
+                            traceback.print_exc()
+                else:
+                    print(f"    ⚠️ No variant mapping data for day {exp_day_idx}")
+        
+        # Debug: Print SRM history
+        if srm_history:
+            print(f"\n📊 SRM History generated: {len(srm_history)} days")
+            for srm_day in srm_history:
+                status = "❌ SRM" if srm_day['srm_detected'] else "✅ OK"
+                print(f"  Day {srm_day['day']}: T/C={srm_day['observed_tc']:.3f} (expected={srm_day['expected_tc']:.3f}) {status}")
+        else:
+            print("\n⚠️ No SRM history data generated")
+
         # Logging similar to demos: results route summary
         try:
             print("\n" + "=" * 70)
@@ -461,10 +636,9 @@ def create_app():
                     sample_ok = total_n >= 2 * planned_per_variant
 
             # Compare current experiment day against planned duration (in days)
-            if exp and exp["planned_days"] and day_index:
+            if exp and exp["planned_days"] and experiment_day_index:
                 planned_days = exp["planned_days"]
-                exp_days = max(day_index - 7, 0)
-                days_ok = exp_days >= planned_days
+                days_ok = experiment_day_index >= planned_days
             # Overall stop recommendation: default is to continue; only
             # recommend stop when all available plans are satisfied.
             if exp:
@@ -500,14 +674,17 @@ def create_app():
             metric_cards=metric_cards_sorted,
             today=today_str,
             today_str=today_str,  # Add today_str for navigator
-            day_index=day_index if unique_days else None,
-            total_days=total_days,
+            day_index=experiment_day_index,  # Now using experiment days (1, 2, 3...)
+            total_days=total_experiment_days,  # Total experiment days, not data days
             current_total_n=current_total_n,
             primary_unit_label=primary_unit_label,
             sample_ok=sample_ok,
             days_ok=days_ok,
             show_agents=True,
             stop_recommended=stop_recommended,
+            historical_data=historical_data,  # Pass historical data for graphs
+            srm_result=srm_result if 'srm_result' in locals() else None,  # Pass SRM check result
+            srm_history=srm_history,  # Pass SRM history for time-series visualization
         )
 
     @app.route("/stop_experiment", methods=["POST"])

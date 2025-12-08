@@ -371,6 +371,7 @@ def create_app():
                         variant_col="variant",
                         unit_id="user_id",
                         alpha=exp["alpha"],
+                        allocation_ratio=exp["allocation_ratio"] if exp["allocation_ratio"] is not None else 0.5,
                         timestamp=today_str,
                     )
 
@@ -401,6 +402,7 @@ def create_app():
                     
                     # Extract SRM results and convert numpy types for JSON serialization
                     srm_result = abtest_results.srm_result if hasattr(abtest_results, 'srm_result') else None
+                    print(f"\n🔍 DEBUG: srm_result from ABTest = {srm_result}")
                     if srm_result:
                         # Convert numpy types to Python native types
                         srm_result = {
@@ -408,8 +410,21 @@ def create_app():
                             "p_value": float(srm_result.get("p_value", 1.0)) if srm_result.get("p_value") is not None else None,
                             "chi2_stat": float(srm_result.get("chi2_stat", 0.0)) if srm_result.get("chi2_stat") is not None else None,
                             "observed": {k: int(v) for k, v in srm_result.get("observed", {}).items()},
-                            "expected": {k: float(v) for k, v in srm_result.get("expected", {}).items()}
+                            "expected": {k: float(v) for k, v in srm_result.get("expected", {}).items()},
+                            "recommendation": srm_result.get("recommendation", "")
                         }
+                        print(f"🔍 DEBUG: Converted srm_result = {srm_result}")
+                        # Log SRM status
+                        if not srm_result["passed"]:
+                            print("\n" + "="*60)
+                            print("⚠️  SRM DETECTED - EXPERIMENT QUALITY ISSUE")
+                            print("="*60)
+                            print(srm_result["recommendation"])
+                            print("="*60 + "\n")
+                        else:
+                            print(f"✓ SRM Check: {srm_result['recommendation']}")
+                    else:
+                        print("⚠️ DEBUG: No srm_result found from ABTest framework")
 
                     # Map ABTest metric_results into metric_cards for UI.
                     # ABTest uses metric IDs based on the function names defined above:
@@ -506,6 +521,7 @@ def create_app():
                             variant_col="variant",
                             unit_id="user_id",
                             alpha=exp["alpha"],
+                            allocation_ratio=exp["allocation_ratio"] if exp["allocation_ratio"] is not None else 0.5,
                             timestamp=hist_day.isoformat(),
                         )
                         

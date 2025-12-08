@@ -46,6 +46,7 @@ class ABTest:
         alpha: float = 0.05,
         variants: Optional[List[str]] = None,
         timestamp: Optional[str] = None,
+        allocation_ratio: Optional[float] = None,
     ):
         """Initialize A/B test.
         
@@ -56,6 +57,8 @@ class ABTest:
             unit_id: Column name for randomization unit (usually 'user_id')
             backend: Statistical backend (defaults to AbexpBackend)
             alpha: Significance level (default 0.05)
+            allocation_ratio: Proportion of traffic to treatment (e.g., 0.3 for 30% treatment / 70% control)
+                If None, assumes equal 50/50 split
         """
         self.name = name
         self.data = data.copy()
@@ -69,6 +72,10 @@ class ABTest:
         
         # Explicit variants configuration (e.g. ["A", "B"])
         self.variants: Optional[List[str]] = variants
+        
+        # Allocation ratio: proportion of traffic to treatment
+        # E.g., 0.3 means 30% treatment / 70% control
+        self.allocation_ratio = allocation_ratio
         
         # Metric registry: name -> metadata dict.
         # For backward compatibility this at least contains:
@@ -375,7 +382,18 @@ class ABTest:
             # Filter to only the variants we're testing
             counts_filtered = {k: v for k, v in counts.items() if k in [variant_a, variant_b]}
             checker = QualityChecker()
-            srm_result = checker.check_srm(counts_filtered)
+            
+            # Build expected_ratio dict based on allocation_ratio if provided
+            expected_ratio = None
+            if self.allocation_ratio is not None:
+                # allocation_ratio is proportion for treatment (variant_b)
+                # control (variant_a) gets the remainder
+                expected_ratio = {
+                    variant_a: 1.0 - self.allocation_ratio,
+                    variant_b: self.allocation_ratio
+                }
+            
+            srm_result = checker.check_srm(counts_filtered, expected_ratio=expected_ratio)
         
         # Test each metric
         metric_results: Dict[str, Dict[str, Any]] = {}

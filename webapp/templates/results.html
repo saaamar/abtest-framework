@@ -541,19 +541,6 @@
               {% endif %}
             </p>
             {% endif %}
-            {% if srm_result %}
-            <p class="results-subtitle {% if not srm_result.passed %}results-subtitle-warning{% endif %}">
-              <strong>SRM Check (Sample Ratio Mismatch):</strong>
-              {% if srm_result.passed %}
-                ✅ Passed - Randomization working correctly
-              {% else %}
-                ⚠️ FAILED - {{ srm_result.recommendation }}
-              {% endif %}
-              <button type="button" class="metric-explain-link" onclick="openSrmExplainModal(event)" style="margin-left: 4px;">
-                What is this?
-              </button>
-            </p>
-            {% endif %}
           </div>
           <div class="results-header-block">
             <h2 class="results-subheading">Experiment setup & progress</h2>
@@ -579,6 +566,21 @@
                 α = {{ experiment.alpha }}, power = {{ experiment.power }}
               {% endif %}
             </p>
+            {% if srm_result %}
+            <p class="results-subtitle {% if not srm_result.passed %}results-subtitle-warning{% endif %}" style="{% if not srm_result.passed %}background: #fff3cd; padding: 8px 12px; border-left: 4px solid #dc3545; margin-top: 8px;{% endif %}">
+              <strong>🔍 Randomization Quality (SRM Check):</strong>
+              {% if srm_result.passed %}
+                <span style="color: #28a745; font-weight: 600;">✅ Passed</span> - Randomization working correctly
+              {% else %}
+                <span style="color: #dc3545; font-weight: 700;">⚠️ FAILED - STOP EXPERIMENT</span><br>
+                <span style="font-size: 13px; color: #856404;">{{ srm_result.recommendation }}</span><br>
+                <strong style="color: #721c24;">⛔ Do not trust metric results until randomization is fixed!</strong>
+              {% endif %}
+              <button type="button" class="metric-explain-link" onclick="openSrmExplainModal(event)" style="margin-left: 4px;">
+                What is SRM?
+              </button>
+            </p>
+            {% endif %}
             <p class="results-subtitle">
               {% if stop_recommended %}
                 ✅ Recommendation: you have reached the planned sample size
@@ -731,19 +733,34 @@
       <!-- Graph Explanation -->
       <div style="background: #f8f9fa; border-left: 4px solid #0078d4; padding: 12px 16px; margin: 16px 0; border-radius: 4px;">
         <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #333;">📊 How to read this graph:</h3>
+        <p style="margin: 0 0 8px 0; font-size: 13px; color: #d63384; font-weight: 600;">⚠️ Important: This graph checks if USERS are being split correctly. It counts how many users are in each group, NOT their metric values (like conversion or revenue).</p>
         <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #555; line-height: 1.6;">
-          <li><strong>Each dot</strong> represents the <strong>observed treatment-to-control ratio</strong> for a given day (calculated as: # of treatment users ÷ # of control users)</li>
-          <li><strong>The vertical line through each dot</strong> shows the <strong>95% confidence interval</strong> — a range of plausible values for the true ratio based on the observed data</li>
+          <li><strong>The Y-axis shows:</strong> Treatment/Control Ratio = (# of users in treatment) ÷ (# of users in control)
+            <ul style="margin-top: 4px; padding-left: 20px; font-size: 12px; color: #666;">
+              <li>Example: 500 users in treatment ÷ 500 users in control = 1.0</li>
+              <li>Example: 550 users in treatment ÷ 450 users in control = 1.22</li>
+            </ul>
+          </li>
+          <li><strong>The dot</strong> shows the observed ratio for that day. It's the center point of the vertical line</li>
+          <li><strong>The vertical line</strong> extends above and below the dot, showing the <strong>95% confidence interval</strong> for that ratio
+            <ul style="margin-top: 4px; padding-left: 20px; font-size: 12px; color: #666;">
+              <li>Example: dot at 1.05, line from 0.98 to 1.12 means "we observed 1.05, but due to random chance, the true underlying ratio could be anywhere from 0.98 to 1.12"</li>
+              <li>Why uncertainty? Even with perfect 50/50 randomization, you might observe 505/495 one day and 498/502 the next due to random variation</li>
+            </ul>
+          </li>
           <li><strong>The blue dashed line</strong> shows your <strong>configured expected ratio</strong> (e.g., 1.0 for a 50/50 split)</li>
           <li><strong>Color coding:</strong>
             <ul style="margin-top: 4px; padding-left: 20px;">
-              <li><span style="color: #28a745; font-weight: 600;">Green dot:</span> The confidence interval <em>includes</em> the expected ratio → randomization looks good ✓</li>
-              <li><span style="color: #dc3545; font-weight: 600;">Red dot:</span> The confidence interval <em>excludes</em> the expected ratio → SRM detected ⚠️</li>
+              <li><span style="color: #28a745; font-weight: 600;">Green dot:</span> The vertical line <em>crosses</em> the blue dashed line → randomization looks good ✓</li>
+              <li><span style="color: #dc3545; font-weight: 600;">Red dot:</span> The vertical line <em>doesn't cross</em> the blue dashed line → <strong>SRM detected! Stop the experiment and investigate before trusting any results</strong> ⚠️</li>
             </ul>
           </li>
         </ul>
+        <p style="margin: 8px 0 4px 0; padding: 8px; background: #fff3cd; border-left: 3px solid #ffc107; font-size: 13px; color: #856404;">
+          <strong>🛑 If you see red dots:</strong> Your randomization is broken. All metric results are unreliable. Stop the experiment immediately and investigate the root cause (buggy assignment logic, biased filtering, technical issues, bot traffic, etc.) before continuing.
+        </p>
         <p style="margin: 8px 0 0 0; font-size: 12px; font-style: italic; color: #666;">
-          💡 Tip: Confidence intervals get narrower over time as more data accumulates, making it easier to detect even small deviations from the expected ratio.
+          💡 Note: This is the same graph regardless of whether your metric is a proportion, mean, or ratio. It only cares about user counts, not metric values.
         </p>
       </div>
       
@@ -1235,7 +1252,7 @@
                 min: function(context) {
                   // Find minimum CI bound across all days
                   const allCILower = ciLower.filter(v => v != null && !isNaN(v));
-                  if (allCILower.length === 0) return 0.8;
+                  if (allCILower.length === 0) return Math.max(0, expectedRatio - 0.2);
                   
                   const minCI = Math.min(...allCILower);
                   const maxCI = Math.max(...ciUpper.filter(v => v != null && !isNaN(v)));
@@ -1249,13 +1266,13 @@
                   const minFromExpected = expectedRatio * 0.90;
                   minValue = Math.min(minValue, minFromExpected);
                   
-                  // Don't go below 0.5 for readability
-                  return Math.max(0.5, minValue);
+                  // Use expectedRatio - 0.2 as floor instead of fixed 0.5
+                  return Math.max(expectedRatio - 0.2, minValue);
                 },
                 max: function(context) {
                   // Find maximum CI bound across all days
                   const allCIUpper = ciUpper.filter(v => v != null && !isNaN(v));
-                  if (allCIUpper.length === 0) return 1.5;
+                  if (allCIUpper.length === 0) return expectedRatio + 0.2;
                   
                   const minCI = Math.min(...ciLower.filter(v => v != null && !isNaN(v)));
                   const maxCI = Math.max(...allCIUpper);
@@ -1269,7 +1286,8 @@
                   const maxFromExpected = expectedRatio * 1.10;
                   maxValue = Math.max(maxValue, maxFromExpected);
                   
-                  return maxValue;
+                  // Use expectedRatio + 0.2 as ceiling
+                  return Math.max(expectedRatio + 0.2, maxValue);
                 },
                 grid: {
                   display: true,

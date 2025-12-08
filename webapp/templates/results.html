@@ -664,20 +664,15 @@
               </button>
             </p>
             {% endif %}
+            {% if stop_recommended %}
             <p class="results-subtitle">
-              {% if stop_recommended %}
-                ✅ Recommendation: you have reached the planned sample size
-                and duration. It is reasonable to stop the experiment and
-                make a decision.
-              {% else %}
-                ⚠ Recommendation: this looks like an interim read. We
-                recommend continuing until the planned sample size and
-                duration are both reached.
-              {% endif %}
+              ✅ <strong>Recommendation:</strong> You have reached the planned sample size
+              and duration. It is reasonable to stop the experiment and
+              make a decision.
             </p>
-            {% if sample_ok is not none and days_ok is not none and (not sample_ok or not days_ok) %}
+            {% else %}
             <p class="results-subtitle results-subtitle-warning">
-              ⚠ Interim results: planned sample size and/or duration not yet
+              ⚠ <strong>Interim results:</strong> Planned sample size and/or duration not yet
               reached. Do not make a final decision based on these
               results yet.
             </p>

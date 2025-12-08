@@ -209,6 +209,46 @@
       color: #005a9e;
     }
 
+    .metric-value-with-tooltip {
+      position: relative;
+      cursor: help;
+    }
+
+    .metric-value-with-tooltip .tooltip-text {
+      visibility: hidden;
+      width: 200px;
+      background-color: #333;
+      color: #fff;
+      text-align: left;
+      border-radius: 6px;
+      padding: 8px 12px;
+      position: absolute;
+      z-index: 1;
+      bottom: 125%;
+      left: 50%;
+      margin-left: -100px;
+      opacity: 0;
+      transition: opacity 0.3s;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .metric-value-with-tooltip .tooltip-text::after {
+      content: "";
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      margin-left: -5px;
+      border-width: 5px;
+      border-style: solid;
+      border-color: #333 transparent transparent transparent;
+    }
+
+    .metric-value-with-tooltip:hover .tooltip-text {
+      visibility: visible;
+      opacity: 1;
+    }
+
     .btn {
       padding: 8px 16px;
       border: 1px solid #d1d1d1;
@@ -677,24 +717,22 @@
           <div class="metric-card-body">
             <div class="metric-row">
               <span class="metric-label">Control</span>
-              <span class="metric-value">{{ "%.3f" | format(card.control_value) }}</span>
+              <span class="metric-value metric-value-with-tooltip">
+                {{ "%.3f" | format(card.control_value) }}
+                {% if card.std_control is not none %}
+                <span class="tooltip-text">Mean: {{ "%.3f" | format(card.control_value) }}<br>Std Dev: {{ "%.3f" | format(card.std_control) }}</span>
+                {% endif %}
+              </span>
             </div>
             <div class="metric-row">
               <span class="metric-label">Treatment</span>
-              <span class="metric-value">{{ "%.3f" | format(card.treatment_value) }}</span>
+              <span class="metric-value metric-value-with-tooltip">
+                {{ "%.3f" | format(card.treatment_value) }}
+                {% if card.std_treatment is not none %}
+                <span class="tooltip-text">Mean: {{ "%.3f" | format(card.treatment_value) }}<br>Std Dev: {{ "%.3f" | format(card.std_treatment) }}</span>
+                {% endif %}
+              </span>
             </div>
-            {% if card.std_control is not none %}
-            <div class="metric-row metric-row-subtle">
-              <span class="metric-label">Std (control)</span>
-              <span class="metric-value">{{ "%.3f" | format(card.std_control) }}</span>
-            </div>
-            {% endif %}
-            {% if card.std_treatment is not none %}
-            <div class="metric-row metric-row-subtle">
-              <span class="metric-label">Std (treatment)</span>
-              <span class="metric-value">{{ "%.3f" | format(card.std_treatment) }}</span>
-            </div>
-            {% endif %}
             {% set c = card.control_value if card.control_value is not none else 0 %}
             {% set t = card.treatment_value if card.treatment_value is not none else 0 %}
             {% set max_val = (c if c > t else t) %}

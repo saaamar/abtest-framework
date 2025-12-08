@@ -360,19 +360,106 @@ else:
 5. **Document Roles** - Make it clear which metrics are primary/guardrail/diagnostic
 6. **Pre-Register** - Decide metric roles BEFORE looking at results
 
-### 4. SRM Checks
+### 4. SRM Checks (Sample Ratio Mismatch Detection)
 
-Sample Ratio Mismatch checks run automatically:
+**What is SRM?**
+
+Sample Ratio Mismatch (SRM) occurs when the actual distribution of users across variants differs significantly from the expected allocation. This is a critical data quality check that runs automatically before analyzing metrics.
+
+**The Chi-Square Test:**
+
+SRM uses a chi-square (χ²) goodness-of-fit test to compare observed vs. expected counts:
+
+```
+χ² = Σ [(observed - expected)² / expected]
+
+For 2 variants:
+χ² = [(n_control - E_control)² / E_control] + [(n_treatment - E_treatment)² / E_treatment]
+
+Then convert χ² to p-value with 1 degree of freedom
+```
+
+**Example:**
+```python
+# Expected 50/50 split with 1000 users
+Expected: 500 control, 500 treatment
+
+# Observed 450 control, 550 treatment
+χ² = (450-500)²/500 + (550-500)²/500 = 10.0
+p-value ≈ 0.0016
+
+Since p < 0.001 → SRM DETECTED ⚠️
+```
+
+**Why alpha=0.001 for SRM (not 0.05)?**
+- Metric tests use α=0.05 (5% false positive rate)
+- SRM uses α=0.001 (0.1% false positive rate) - much stricter
+- We only want to flag SRM when extremely confident something is broken
+- This prevents false alarms from normal traffic variation
+
+**Framework Usage:**
 
 ```python
+from ab_framework import ABTest
+
+# Flexible traffic allocation
+test = ABTest(
+    name="homepage_redesign",
+    data=df,
+    variant_col="variant",
+    unit_id="user_id",
+    allocation_ratio=0.3  # 30% treatment / 70% control
+)
+
+# SRM check runs automatically by default
 results = test.analyze(
     metrics=['conversion_rate'],
     run_srm_check=True  # Default
 )
 
+# Check SRM result
 if not results.srm_result['passed']:
-    print("⚠️ WARNING:", results.srm_result['recommendation'])
+    print("⚠️ SRM DETECTED - DO NOT TRUST RESULTS")
+    print(results.srm_result['recommendation'])
+    # Example output:
+    # [WARNING] SRM DETECTED (p=0.000123, alpha=0.001)
+    # Variant B deviates by +15.2%
+    # Action: Check randomization logic and data collection
+    
+# Detailed SRM information
+print(f"P-value: {results.srm_result['p_value']}")
+print(f"Chi-square: {results.srm_result['chi_square']}")
+print(f"Observed: {results.srm_result['observed']}")
+print(f"Expected: {results.srm_result['expected']}")
+print(f"Deviations: {results.srm_result['deviations_pct']}")
 ```
+
+**Traffic Allocation Options:**
+
+```python
+# 50/50 split (default)
+test1 = ABTest(name="test1", data=df, allocation_ratio=0.5)
+
+# 70/30 split (70% control, 30% treatment)
+test2 = ABTest(name="test2", data=df, allocation_ratio=0.3)
+
+# 90/10 split for high-risk changes
+test3 = ABTest(name="test3", data=df, allocation_ratio=0.1)
+
+# Equal split (when allocation_ratio not specified)
+test4 = ABTest(name="test4", data=df)  # Assumes 50/50
+```
+
+**When SRM is Detected:**
+
+1. **STOP** - Do not trust any metric results
+2. **Investigate** - Common causes:
+   - Buggy randomization logic
+   - Data pipeline filtering bias
+   - Technical issues (bot traffic, cache issues)
+   - Variant-specific crashes or errors
+3. **Fix** - Correct the root cause
+4. **Restart** - Begin a new experiment after validation
 
 ## Advanced Usage
 
@@ -419,6 +506,158 @@ else:
 2. ✅ **Metric collection is accurate** - No systematic bias
 3. ✅ **No implementation bugs** - Would cause spurious differences
 4. ✅ **Actual variance estimate** - For accurate sample size calculation
+
+### Monitoring Experiments Over Time
+
+**Recommended Time-Series Visualizations:**
+
+When running multi-day experiments, track these three key graphs:
+
+#### 1. SRM History (Randomization Quality Over Time)
+```python
+# Track Treatment/Control ratio per day
+# Y-axis: Observed T/C ratio (e.g., 1.0 for 50/50, 0.43 for 30/70)
+# X-axis: Experiment day
+
+for day in experiment_days:
+    day_data = df[df['day'] == day]
+    n_control = day_data[day_data['variant'] == 'A']['user_id'].nunique()
+    n_treatment = day_data[day_data['variant'] == 'B']['user_id'].nunique()
+    
+    ratio = n_treatment / n_control
+    expected_ratio = allocation_ratio / (1 - allocation_ratio)
+    
+    # Calculate 95% CI for the ratio
+    # Plot: dot at observed ratio, error bar for CI
+    # Color: green if CI crosses expected, red if SRM detected
+```
+
+**Interpretation:**
+- Green dots: Randomization working correctly
+- Red dots: SRM detected → STOP and investigate
+- Horizontal dashed line: Expected ratio from your allocation
+
+#### 2. Metric Value Over Time
+```python
+# Track control vs treatment metric values per day
+# Y-axis: Metric value (e.g., conversion rate, revenue)
+# X-axis: Experiment day
+
+for day in experiment_days:
+    day_data = df[df['day'] == day]
+    control_metric = calculate_metric(day_data[day_data['variant'] == 'A'])
+    treatment_metric = calculate_metric(day_data[day_data['variant'] == 'B'])
+    
+    # Plot both lines
+    # Control: dashed line
+    # Treatment: solid line
+```
+
+**Interpretation:**
+- Shows when treatment effect stabilizes
+- Identifies temporal trends or day-of-week effects  
+- Helps determine if experiment duration is sufficient
+- Can reveal learning effects or novelty effects
+
+#### 3. P-Value Over Time
+```python
+# Track statistical significance progression
+# Y-axis: P-value (log scale recommended)
+# X-axis: Experiment day
+
+for day in range(1, max_day + 1):
+    cumulative_data = df[df['day'] <= day]
+    test = ABTest(name=f"day_{day}", data=cumulative_data)
+    results = test.analyze(['conversion_rate'])
+    
+    p_value = results.metric_results['conversion_rate']['p_value']
+    # Plot with horizontal line at alpha (e.g., 0.05)
+```
+
+**Interpretation:**
+- Shows if/when experiment reaches significance
+- Prevents premature stopping decisions
+- Identifies if effect size is stable or volatile
+- p-value crossing alpha = statistical significance achieved
+
+**Example Visualization Code:**
+
+```python
+import matplotlib.pyplot as plt
+import pandas as pd
+
+def plot_experiment_progress(df, metric_name, allocation_ratio=0.5):
+    """Generate 3 monitoring graphs for experiment tracking."""
+    
+    fig, axes = plt.subplots(3, 1, figsize=(12, 10))
+    
+    # Graph 1: SRM History
+    ax1 = axes[0]
+    expected_ratio = allocation_ratio / (1 - allocation_ratio)
+    
+    days = []
+    ratios = []
+    ci_lower = []
+    ci_upper = []
+    
+    for day in df['day'].unique():
+        day_data = df[df['day'] == day]
+        n_c = day_data[day_data['variant'] == 'A']['user_id'].nunique()
+        n_t = day_data[day_data['variant'] == 'B']['user_id'].nunique()
+        ratio = n_t / n_c
+        
+        days.append(day)
+        ratios.append(ratio)
+        # Calculate CI (simplified)
+        ci_lower.append(ratio - 0.2)
+        ci_upper.append(ratio + 0.2)
+    
+    ax1.errorbar(days, ratios, yerr=[ratios - ci_lower, ci_upper - ratios])
+    ax1.axhline(expected_ratio, linestyle='--', color='blue', label='Expected')
+    ax1.set_title('SRM Check History')
+    ax1.set_ylabel('Treatment/Control Ratio')
+    ax1.legend()
+    
+    # Graph 2: Metric Value Over Time  
+    ax2 = axes[1]
+    control_values = []
+    treatment_values = []
+    
+    for day in df['day'].unique():
+        day_data = df[df['day'] == day]
+        control_values.append(
+            day_data[day_data['variant'] == 'A'][metric_name].mean()
+        )
+        treatment_values.append(
+            day_data[day_data['variant'] == 'B'][metric_name].mean()
+        )
+    
+    ax2.plot(days, control_values, 'o--', label='Control')
+    ax2.plot(days, treatment_values, 'o-', label='Treatment')
+    ax2.set_title(f'{metric_name} Over Time')
+    ax2.set_ylabel('Metric Value')
+    ax2.legend()
+    
+    # Graph 3: P-Value Over Time
+    ax3 = axes[2]
+    p_values = []
+    
+    for day in range(1, len(days) + 1):
+        cumulative_data = df[df['day'] <= day]
+        # Calculate p-value for cumulative data
+        # (simplified - actual implementation would use ABTest)
+        p_values.append(0.05)  # Placeholder
+    
+    ax3.plot(range(1, len(days) + 1), p_values, 'o-')
+    ax3.axhline(0.05, linestyle='--', color='red', label='α=0.05')
+    ax3.set_title('P-Value Over Time')
+    ax3.set_ylabel('P-Value')
+    ax3.set_xlabel('Experiment Day')
+    ax3.legend()
+    
+    plt.tight_layout()
+    plt.show()
+```
 
 **A/A Test Duration Guidelines:**
 

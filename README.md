@@ -296,9 +296,138 @@ At a theory level, SRM checks are typically implemented via a **χ² goodness‑
 *`AB_TESTING_THEORY.md` – Section 5, “Data Quality, SRM, and Sequential Monitoring”.*
 
 **A/A Test Success Criteria (package view):**
-* Traffic split close to the intended allocation (e.g., near 50/50 when planned)
-* Metrics show **no statistically significant difference** (p‑value > α)
+* **SRM Check Passed**: Traffic split matches expected allocation (p > 0.001)
+* **No Significant Differences**: Metrics show no statistically significant difference (p‑value > α)
 * If a difference appears significant, or SRM is flagged, investigate before proceeding to A/B testing
+
+#### Understanding Sample Ratio Mismatch (SRM) in Detail
+
+**What is SRM?**
+
+Sample Ratio Mismatch (SRM) detects when the actual distribution of users across experiment variants differs significantly from the expected allocation. This is a **critical data quality check** that must pass before trusting any experiment results.
+
+**Why SRM Matters:**
+- Broken randomization invalidates all metric results
+- Even statistically significant results cannot be trusted if SRM is detected
+- Common causes: buggy assignment logic, biased filtering, technical issues, bot traffic, data pipeline errors
+
+**The Statistical Test: Chi-Square Goodness-of-Fit**
+
+SRM uses a **chi-square (χ²) test** to compare observed vs. expected user counts:
+
+```
+χ² = Σ [(observed - expected)² / expected]
+
+For 2 variants:
+χ² = [(n_control - E_control)² / E_control] + [(n_treatment - E_treatment)² / E_treatment]
+```
+
+**Example Calculation:**
+```python
+# Expected 50/50 split with 1000 total users
+expected_control = 500
+expected_treatment = 500
+
+# Observed: 450 control, 550 treatment
+observed_control = 450
+observed_treatment = 550
+
+χ² = (450 - 500)² / 500 + (550 - 500)² / 500
+   = 2500 / 500 + 2500 / 500
+   = 5.0 + 5.0
+   = 10.0
+
+# Convert χ² to p-value (degrees of freedom = 1)
+p-value ≈ 0.0016
+
+# Since p < 0.001 (SRM alpha threshold) → SRM DETECTED ⚠️
+```
+
+**P-Value Interpretation for SRM:**
+- **p-value**: "If randomization was working correctly, how surprising is this mismatch?"
+- **p > 0.001**: ✅ Mismatch is within normal random variation
+- **p < 0.001**: ❌ Mismatch is too extreme to be random chance alone
+
+**Why alpha=0.001 for SRM (stricter than metric tests)?**
+- Metric tests use α=0.05 (5% false positive rate)
+- SRM uses α=0.001 (0.1% false positive rate)
+- We only raise SRM alarms when **extremely confident** something is broken
+- This prevents false alarms from normal day-to-day traffic fluctuations
+
+**SRM for Non-50/50 Splits:**
+
+The framework supports any traffic allocation (e.g., 70/30, 90/10):
+
+```python
+# 70% control / 30% treatment with 1000 users
+expected_control = 700
+expected_treatment = 300
+
+# Observed: 680 control, 320 treatment
+χ² = (680 - 700)² / 700 + (320 - 300)² / 300
+   = 400 / 700 + 400 / 300
+   = 0.571 + 1.333
+   = 1.904
+
+p-value ≈ 0.168 → No SRM (within normal variation)
+```
+
+**SRM Monitoring Over Time:**
+
+The framework enables tracking SRM **per-day** to catch issues early:
+
+```python
+# Day-by-day SRM checks
+Day 1: 78 control / 82 treatment, expected 80/80 → p=0.752 ✅ PASS
+Day 2: 112 control / 128 treatment, expected 120/120 → p=0.302 ✅ PASS  
+Day 5: 450 control / 550 treatment, expected 500/500 → p=0.002 ❌ SRM DETECTED
+
+# Visual tracking: Plot T/C ratio over time with confidence intervals
+# Red dots = SRM detected on that day → STOP and investigate
+```
+
+**Recommended Visualizations:**
+1. **SRM History Graph**: Treatment/Control ratio per day with 95% CI error bars
+   - Y-axis: Observed T/C ratio (e.g., 1.0 for 50/50, 0.43 for 30/70)
+   - Expected ratio shown as horizontal dashed line
+   - Green dots: CI crosses expected ratio (no SRM)
+   - Red dots: CI doesn't cross expected ratio (SRM detected)
+
+2. **Metric Value Over Time**: Track how metrics evolve day-by-day
+   - Separate lines for control vs treatment
+   - Helps identify when changes stabilize
+   - Useful for detecting temporal effects
+
+3. **P-Value Over Time**: Monitor statistical significance progression
+   - Shows when experiment reaches significance
+   - Helps prevent premature stopping
+   - Identifies trends in effect size stability
+
+**Framework Implementation:**
+
+```python
+from ab_framework import ABTest
+
+test = ABTest(
+    name="homepage_redesign",
+    data=df,
+    variant_col="variant",
+    unit_id="user_id",
+    allocation_ratio=0.3  # 30% treatment, 70% control
+)
+
+# Run analysis with automatic SRM check
+results = test.analyze(run_srm_check=True)
+
+# Check SRM result
+if not results.srm_result['passed']:
+    print("⚠️ SRM DETECTED - DO NOT TRUST METRIC RESULTS")
+    print(results.srm_result['recommendation'])
+    # Example output:
+    # [WARNING] SRM DETECTED (p=0.000123, alpha=0.001)
+    # Variant B deviates by +15.2%
+    # Action: Check randomization logic and data collection
+```
 
 #### 3. **A/B Testing Phase**
 ```python

@@ -151,19 +151,13 @@ In that setup, you typically:
 * Run primary tests at the **conversation level** (respecting the randomization unit), and
 * Optionally use **session‑level aggregates** for richer diagnostics, with cluster‑robust methods that **cluster by `conversation_id`**.
 
-For example, in Python with `statsmodels` you might:
+For example, when using regression models with clustering:
 
-```python
-import statsmodels.formula.api as smf
-
-# conversation_id is the randomized unit; sessions are repeated observations
-model = smf.ols(
-    "session_metric ~ C(variant_label)",
-    data=session_level_df
-).fit(cov_type="cluster", cov_kwds={"groups": session_level_df["conversation_id"]})
-
-print(model.summary())  # treatment coefficient with conversation-level clustered SEs
-```
+* The model specification includes the variant assignment as a predictor
+* Standard errors are computed with cluster-robust covariance estimation
+* Clustering is performed at the randomization unit level (e.g., `conversation_id`)
+* This produces valid inference even when analyzing lower-level units (e.g., sessions)
+* The treatment coefficient estimate remains unchanged; only its standard error is adjusted
 
 ### Practical guidance
 
@@ -361,7 +355,50 @@ These considerations are general to A/B testing, regardless of the specific impl
 
 Before running any A/B test with real treatment effects, best practice is to conduct an **A/A test**: both groups receive the *same* treatment (typically the current production experience), and you verify that the experimentation infrastructure produces valid results.
 
-### 5.1 Purpose of A/A testing
+### 5.1 Why do we prefer to have A/A tests?
+
+**The fundamental problem:** You are about to trust your experimentation infrastructure with business-critical decisions worth potentially millions of dollars. How do you know it works correctly?
+
+An A/A test is like a **pre-flight check** before taking off. You wouldn't fly a plane without verifying the instruments work. Similarly, you shouldn't run an A/B test without verifying your experimentation system works.
+
+**What could go wrong without A/A testing?**
+
+Consider these real-world failure modes that A/A tests catch:
+
+1. **Silent randomization bugs**
+   - Example: "New users always get treatment, returning users get control"
+   - Impact: Results are completely invalid, but you won't know without A/A testing
+   - A/A test catches it: You'll see systematic differences where there should be none
+
+2. **Data pipeline issues**
+   - Example: "Treatment events are logged with 50ms extra latency due to a subtle code path"
+   - Impact: Appears treatment is slower, but it's just measurement bias
+   - A/A test catches it: Performance metrics show artificial differences
+
+3. **Metric calculation bugs**
+   - Example: "Control uses cached aggregation, treatment computes fresh (both should be identical)"
+   - Impact: Metrics differ due to implementation, not user behavior
+   - A/A test catches it: Same data produces different metric values
+
+4. **Unknown variance**
+   - Example: "Historical data says variance = 0.5, but actual system has variance = 0.8"
+   - Impact: Your power calculations are wrong, experiment runs too short
+   - A/A test provides: Accurate variance from your actual system
+
+**Cost of NOT doing A/A testing:**
+
+| Without A/A test | With A/A test |
+|------------------|---------------|
+| Ship broken features based on invalid data | Catch bugs before they cause damage |
+| Waste weeks on underpowered experiments | Use accurate variance for power calculations |
+| Lose credibility when stakeholders find bugs | Build trust with validated infrastructure |
+| Debug in production during critical A/B tests | Debug in safe A/A phase before real experiments |
+
+**The A/A test guarantee:**
+
+> If your A/A test passes cleanly, you can trust your A/B test results. If it fails, you just saved yourself from making a bad decision based on broken data.
+
+### 5.1.1 Purpose of A/A testing (detailed)
 
 An A/A test validates the **null hypothesis machinery** itself:
 
@@ -373,6 +410,16 @@ This addresses several critical infrastructure questions:
 2. **Metric collection**: Are metrics computed consistently across variants?
 3. **Implementation bugs**: Are there code paths that differ between variants even when both should be identical?
 4. **Variance estimation**: What is the actual baseline variance for sample size planning?
+
+**Concrete validation checklist:**
+
+| Infrastructure component | What A/A validates | How it catches bugs |
+|-------------------------|-------------------|-------------------|
+| Randomization logic | Traffic splits match design (e.g., 50/50) | SRM check: chi-square test on user counts |
+| Metric computation | Same users produce same metrics | p-value should be > 0.05 |
+| Code paths | No variant-specific behavior | Any systematic difference indicates a bug |
+| Data pipeline | Logging/filtering is symmetric | Sample sizes and distributions should match |
+| Variance | Real-world variability | Observed std matches or exceeds expectations |
 
 ### 5.2 Expected behavior in an A/A test
 
@@ -539,12 +586,129 @@ $$
 \chi^2 = \sum_{v \in \{A,B\}} \frac{(n_v - E_v)^2}{E_v}.
 $$
 
+**Example calculation for 50/50 split:**
+
+```
+Expected: 500 control, 500 treatment (N = 1000)
+Observed: 450 control, 550 treatment
+
+χ² = (450 - 500)² / 500 + (550 - 500)² / 500
+   = 2500 / 500 + 2500 / 500
+   = 5.0 + 5.0
+   = 10.0
+
+With 1 degree of freedom:
+p-value ≈ 0.0016
+
+Since p < 0.001 → SRM DETECTED
+```
+
 Under the null hypothesis of *no SRM* (i.e., routing behaves as designed), this statistic is approximately χ²‑distributed with 1 degree of freedom, and a p‑value $p_\text{SRM}$ is obtained from that distribution.
 
-* If $p_\text{SRM}$ is very small (e.g., $< 10^{-4}$), the imbalance is **extremely unlikely** under proper randomization.
-* In that case, results should be treated as **INCONCLUSIVE** until you investigate and fix the underlying issue.
+**P-value interpretation for SRM:**
 
-In the framework, the SRM test is conceptually part of a broader **data quality check** that also looks at minimum sample sizes, duration vs. plan, external events, and pipeline health.
+The p-value answers: "If randomization was working correctly, how surprising is this mismatch?"
+
+* $p > 0.001$: ✅ Mismatch within normal random variation
+* $p < 0.001$: ❌ Mismatch too extreme to be chance alone
+
+**Why alpha = 0.001 for SRM (not 0.05)?**
+
+Unlike metric tests which use $\alpha = 0.05$, SRM checks use a **stricter threshold** of $\alpha = 0.001$:
+
+* **Metric tests**: Balance false positives vs false negatives (both costly)
+* **SRM checks**: Only flag when **extremely confident** something is broken
+* **Rationale**: Day-to-day traffic variation can cause minor imbalances; we only want alarms for serious issues
+
+This means:
+* If $p_\text{SRM} = 0.002$ (between 0.001 and 0.05): Mismatch is notable but might be random variation → monitor closely
+* If $p_\text{SRM} = 0.0001$ (much less than 0.001): Almost certainly a real problem → stop and investigate
+
+#### SRM for non-50/50 splits
+
+The framework supports arbitrary traffic allocations. For a 70/30 split (70% control, 30% treatment):
+
+$$
+\begin{align*}
+E_A &= 0.7 \times N \\
+E_B &= 0.3 \times N
+\end{align*}
+$$
+
+**Example with 70/30 allocation:**
+
+```
+Expected: 700 control, 300 treatment (N = 1000)
+Observed: 680 control, 320 treatment
+
+χ² = (680 - 700)² / 700 + (320 - 300)² / 300
+   = 400 / 700 + 400 / 300
+   = 0.571 + 1.333
+   = 1.904
+
+p-value ≈ 0.168 → No SRM (within normal variation)
+```
+
+**Framework implementation:**
+
+The framework accepts an `allocation_ratio` parameter (the proportion allocated to treatment) during test initialization. When the SRM check is executed during analysis, the framework:
+
+1. Computes expected counts based on the allocation ratio and total sample size
+2. Calculates the χ² statistic comparing observed vs expected counts
+3. Derives the p-value from the χ² distribution with 1 degree of freedom
+4. Returns a comprehensive result containing:
+   - Boolean pass/fail indicator
+   - Exact p-value and chi-square statistic
+   - Observed and expected counts per variant
+   - Percentage deviations from expected
+   - Human-readable recommendation for action
+
+#### Per-day SRM monitoring
+
+Best practice is to check SRM **daily** throughout the experiment, not just at the end:
+
+**Why daily monitoring?**
+
+1. **Early detection**: Catch randomization bugs quickly
+2. **Temporal patterns**: Identify if SRM appears on specific days (e.g., weekends)
+3. **Drift detection**: Spot gradual accumulation of imbalance
+4. **Root cause analysis**: Correlate SRM with deployments or external events
+
+**Statistical interpretation of daily monitoring:**
+
+When monitoring SRM over time, each day's data produces:
+
+* An observed Treatment/Control ratio
+* A 95% confidence interval around that ratio
+* A comparison against the expected ratio from the experimental design
+
+The key diagnostic principle is whether the confidence interval **includes or excludes** the expected ratio:
+
+* **CI includes expected ratio**: The observed imbalance is consistent with random sampling variation → No evidence of SRM
+* **CI excludes expected ratio**: The observed imbalance is statistically incompatible with the design → Strong evidence of SRM → Investigation required
+
+For example, with a 50/50 design (expected T/C ratio = 1.00):
+* Day 1: T/C = 1.05, CI = [0.92, 1.18] → CI includes 1.00 → No SRM detected
+* Day 2: T/C = 1.23, CI = [1.12, 1.34] → CI excludes 1.00 → SRM detected → Stop and investigate
+
+This approach combines the **point estimate** (observed ratio) with its **statistical uncertainty** (confidence interval) to make robust daily decisions about data quality.
+
+The SRM test is conceptually part of a broader **data quality check** that also examines minimum sample sizes, experiment duration relative to plan, external events, and data pipeline health.
+
+**When SRM is detected:**
+
+If $p_\text{SRM}$ is very small (e.g., $< 0.001$), the imbalance is **extremely unlikely** under proper randomization. In that case:
+
+1. **STOP** analyzing metrics immediately
+2. **INVESTIGATE** root causes:
+   - Randomization logic bugs
+   - Data pipeline filtering
+   - Technical issues (bot traffic, caching)
+   - Variant-specific crashes
+3. **FIX** the underlying issue
+4. **RESTART** the experiment after validation
+
+Results should be treated as **INCONCLUSIVE** until you investigate and fix the underlying issue. Even statistically significant metric results are **invalid** in the presence of SRM.
 
 ### 6.2 Sequential monitoring and peeking
 

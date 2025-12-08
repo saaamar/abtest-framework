@@ -476,6 +476,49 @@
       display: flex;
       align-items: center;
     }
+
+    /* Collapsible section styles */
+    .collapsible-header {
+      cursor: pointer;
+      padding: 12px 16px;
+      background: #f0f0f0;
+      border: 1px solid #d1d1d1;
+      border-radius: 4px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: background 0.2s;
+    }
+
+    .collapsible-header:hover {
+      background: #e5e5e5;
+    }
+
+    .collapsible-header-text {
+      font-size: 13px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .collapsible-arrow {
+      font-size: 14px;
+      color: #666;
+      transition: transform 0.2s;
+    }
+
+    .collapsible-arrow.expanded {
+      transform: rotate(90deg);
+    }
+
+    .collapsible-content {
+      display: none;
+      margin-bottom: 16px;
+    }
+
+    .collapsible-content.expanded {
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -686,9 +729,14 @@
               <div class="metric-canvas-wrapper">
                 <canvas id="metricChart_{{ card.name }}"></canvas>
               </div>
-              <div class="metric-chart-title">P-Value Over Time</div>
-              <div class="metric-canvas-wrapper">
-                <canvas id="pvalueChart_{{ card.name }}"></canvas>
+              <div class="collapsible-header" onclick="toggleCollapsible('pvalue_{{ card.name }}')">
+                <span class="collapsible-header-text">P-Value Over Time</span>
+                <span class="collapsible-arrow" id="arrow_pvalue_{{ card.name }}">▶</span>
+              </div>
+              <div class="collapsible-content" id="content_pvalue_{{ card.name }}">
+                <div class="metric-canvas-wrapper">
+                  <canvas id="pvalueChart_{{ card.name }}"></canvas>
+                </div>
               </div>
             </div>
             {% endif %}
@@ -724,11 +772,15 @@
     <!-- Debug: srm_history exists: {{ srm_history is defined }}, length: {{ srm_history|length if srm_history else 0 }} -->
     {% if srm_history and srm_history|length > 0 %}
     <section class="srm-visualization-section">
-      <h2 class="srm-viz-title">Randomization Quality Over Time (SRM Check)</h2>
-      <p class="srm-viz-subtitle">
-        Tracking the treatment-to-control ratio across experiment days. 
-        A properly functioning randomization should keep the observed ratio close to the configured allocation.
-      </p>
+      <div class="collapsible-header" onclick="toggleCollapsible('srm_section')">
+        <span class="collapsible-header-text">🔍 Randomization Quality Over Time (SRM Check)</span>
+        <span class="collapsible-arrow" id="arrow_srm_section">▶</span>
+      </div>
+      <div class="collapsible-content" id="content_srm_section">
+        <p class="srm-viz-subtitle">
+          Tracking the treatment-to-control ratio across experiment days. 
+          A properly functioning randomization should keep the observed ratio close to the configured allocation.
+        </p>
       
       <!-- Graph Explanation -->
       <div style="background: #f8f9fa; border-left: 4px solid #0078d4; padding: 12px 16px; margin: 16px 0; border-radius: 4px;">
@@ -764,8 +816,9 @@
         </p>
       </div>
       
-      <div class="chart-container" style="position: relative; height: 400px; margin-top: 20px;">
-        <canvas id="srm-cumulative-chart"></canvas>
+        <div class="chart-container" style="position: relative; height: 400px; margin-top: 20px;">
+          <canvas id="srm-cumulative-chart"></canvas>
+        </div>
       </div>
     </section>
     {% endif %}
@@ -836,6 +889,23 @@
   </div>
 
   <script>
+    function toggleCollapsible(id) {
+      const content = document.getElementById('content_' + id);
+      const arrow = document.getElementById('arrow_' + id);
+      
+      if (content && arrow) {
+        const isExpanded = content.classList.contains('expanded');
+        
+        if (isExpanded) {
+          content.classList.remove('expanded');
+          arrow.classList.remove('expanded');
+        } else {
+          content.classList.add('expanded');
+          arrow.classList.add('expanded');
+        }
+      }
+    }
+
     function openStatExplainModal(event) {
       if (event) {
         event.stopPropagation();

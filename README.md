@@ -138,6 +138,10 @@ All formulas, variance definitions, sample‑size equations, and clustered stand
 
 *See: `AB_TESTING_THEORY.md` – Section 3, “Statistical Framework & Math Cheat‑Sheet”.*
 
+> **Note on traffic / data‑quality monitoring**  
+> This library **does not** implement runtime traffic monitoring, SRM alerting, or “daily sample health” checks. Those responsibilities live in your upstream experimentation / logging system (dashboards, alerts, data‑quality monitors).  
+> The theory reference describes recommended practices for these checks in **AB_TESTING_THEORY.md – Section 5.0.1, “Traffic and Data Quality Monitoring (daily checks)”**, but they are intentionally **out of scope** for this analysis layer’s APIs.
+
 ## Repository Structure
 
 - `ab_framework/`: Core A/B testing framework package

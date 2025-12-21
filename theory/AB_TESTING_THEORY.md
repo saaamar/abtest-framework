@@ -202,6 +202,10 @@ For quick reference inside this framework, we will often summarize the core stat
 * **Minimum Detectable Effect (MDE)** – the *smallest business‑relevant change* you want to be able to detect
 * **Sample size** – number of randomized units needed to reach your chosen α, power, and MDE
 
+Recall that **Type I error (α)** is a *false positive* (you conclude there is an effect when in truth there is none), and **Type II error (β)** is a *false negative* (you miss a real effect). In the figure below, the x‑axis is the **standardized test statistic** (z‑score): 0 means "no difference" under the null, values like 2 or −2 mean "two standard deviations away" from that null. The blue curve shows the null world (no effect), the orange curve shows a world with a real effect, and the vertical dashed lines mark the decision thresholds for a two‑sided test with α = 0.05. The following illustration shows how these error regions relate to the knobs above in a simple z‑test setup:
+
+![Type I (α) and Type II (β) error regions](type1_type2_errors.png)
+
 ### A) Proportion / rate metrics (conversion rate, CTR, etc.)
 
 Let:
@@ -265,6 +269,10 @@ Where:
 * **MDE** = absolute minimum detectable effect (e.g., 10% relative lift on 3.2% → 0.0032 absolute)
 
 This is the formula used by the framework's backend planning API (for example, `StatisticalBackend.sample_size_proportion` in the default backend implementation).
+
+To build intuition, the next figure shows that **the smaller the effect you want to detect (MDE), the more users you need in each variant**, even when the baseline rate stays the same. The red marker highlights a common planning example: detecting a **10% relative lift** over the baseline and how many users per variant that would require:
+
+![Sample size per variant vs. MDE](sample_size_vs_mde.png)
 
 ### D) Clustered standard errors (when observations are grouped)
 
@@ -338,6 +346,14 @@ Choose metric and baseline → Compute required sample size → Map to duration 
 
 The framework’s helpers (described in the `README.md` examples) automate the last part of this chain given your choices of α, power, baseline, MDE, and traffic.
 
+To see how **changing α and power** affects planning, consider holding the baseline rate (3.2%) and relative lift (10%) fixed. The next figure shows the required sample size per variant as you ask for higher power (moving right on the x‑axis), for three common α choices (0.10, 0.05, 0.01). Stricter α (smaller values) and higher power both push the required sample size up:
+
+![Sample size per variant vs. power for different α](sample_size_vs_power_alpha.png)
+
+The following plot complements this workflow by showing how **power increases with sample size** for a fixed proportion metric and a fixed relative lift. It makes clear why under‑powered experiments (too few units per variant) will struggle to detect even meaningful effects:
+
+![Power vs. sample size](power_vs_sample_size.png)
+
 ### 4.3 Practical considerations
 
 When interpreting required sample sizes and planned durations, you should also account for:
@@ -397,6 +413,54 @@ Consider these real-world failure modes that A/A tests catch:
 **The A/A test guarantee:**
 
 > If your A/A test passes cleanly, you can trust your A/B test results. If it fails, you just saved yourself from making a bad decision based on broken data.
+
+### 5.0.1 Traffic and Data Quality Monitoring (daily checks)
+
+Even with correct statistical tests, an experiment can silently break if **traffic or logging stops flowing** (for example, a bug that stops assigning users to a variant or drops events). This is not a problem of p‑values, but of **data quality and volume**.
+
+We therefore recommend treating **daily traffic monitoring** as a first‑class part of your experimentation practice:
+
+1. **Daily variant counts**  
+   Track per‑day counts of randomized units by variant, e.g. $n_A(d)$ and $n_B(d)$ for day $d$.
+   * Compare $n_A(d) + n_B(d)$ against an expected range from historical traffic.
+   * Alert if total traffic drops sharply (e.g., < 70–80% of expectation) or is near zero.
+   * Alert if only one variant receives traffic (e.g., $n_A(d) = 0$, $n_B(d) > 0$), which indicates an assignment bug.
+
+2. **Cumulative growth sanity check**  
+   Plot cumulative sample sizes $n_A^{\text{cum}}(d)$ and $n_B^{\text{cum}}(d)$ over calendar time.
+   * They should be **monotone increasing** while the experiment is live.
+   * If the cumulative curves **plateau** while your application still has normal traffic, this is a strong signal that logging or assignment has broken.
+
+3. **Allocation ratio monitoring**  
+   Monitor the realized allocation ratio
+   $$
+   r(d) = \frac{n_A^{\text{cum}}(d)}{n_A^{\text{cum}}(d) + n_B^{\text{cum}}(d)}
+   $$
+   * For a 70/30 experiment (as in the illustrative plot), $r(d)$ should stay close to $0.7$; large or sudden deviations suggest randomization or routing bugs.
+   * This is the same idea as an **SRM (Sample Ratio Mismatch)** check, but viewed as a time series.
+
+![alt text](routing_bug.png)
+
+In the provided graph, a simulated "routing bug" is introduced around Day 21 for a planned **70/30 traffic split**. You can see the ratio begin to drift away from the $0.7$ baseline and eventually leave the gray ±3σ band that represents normal random noise. Such sudden or sustained deviations are strong indicators of a randomization failure, sample ratio mismatch (SRM), or a bug in the assignment logic
+
+4. **Missing / malformed assignment and metrics**  
+   Track the fraction of rows with missing or invalid `variant_label` or corrupted metric fields.
+   * Sudden spikes indicate issues in upstream tagging or data pipelines.
+   * This is especially important when rolling out new logging code alongside experiments.
+
+5. **“Is today’s sample good enough?”**  
+   Per‑day cuts are often **not individually powered**; what matters is that cumulative sample size eventually reaches the planned requirement from Section 4. Still, daily samples should not be pathologically small:
+   * For proportion metrics, a common rule of thumb is $p \cdot n$ and $(1-p) \cdot n$ both ≥ 5–10 per variant if you want to interpret a daily estimate.
+   * In practice, many teams only treat daily cuts as **diagnostic** when there are at least a few hundred units per variant.
+
+Together, these checks answer two operational questions:
+
+* **“Are we still getting enough data each day?”**  
+  (If not, you may need to extend the experiment or fix a traffic drop.)
+* **“Would we notice if a bug stopped generating or logging samples?”**  
+  (Daily count and cumulative growth monitors should fire alerts well before you make decisions based on broken data.)
+
+Importantly, these monitoring and alerting mechanisms live in your **experimentation / data platform**, not inside this analysis library. The framework assumes that, by the time data reaches it, basic traffic and logging sanity checks have already passed.
 
 ### 5.1.1 Purpose of A/A testing (detailed)
 
@@ -987,3 +1051,18 @@ This section tracks topics that we plan to elaborate on in future iterations of 
     * Concrete numerical examples comparing the two approaches on the same dataset.
 
 Additional TODO items can be added here as the framework evolves.
+
+---
+
+### Appendix A. Reproducing Figures
+
+All figures embedded in this document (for example, the SRM / routing‑bug plot and the sample‑size / power diagrams) are generated from a small Python helper script kept under version control alongside the theory file.
+
+To regenerate them, from the repository root run:
+
+```bash
+python theory/generate_theory_graphs.py
+```
+
+This script writes PNG files into the same `theory/` directory (e.g. `routing_bug.png`, `type1_type2_errors.png`, `sample_size_vs_mde.png`, `power_vs_sample_size.png`). The markdown references these files by relative path, so rerunning the script is all that is needed to refresh the graphics after tweaking parameters or styles.
+The script also generates an additional planning figure, `sample_size_vs_power_alpha.png`, which shows how the required sample size per variant changes as you vary α and power for a fixed baseline and MDE.

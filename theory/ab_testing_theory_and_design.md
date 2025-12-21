@@ -3,12 +3,12 @@
 
 [TOC]
 
-# 📘 A/B Testing Theory for the Dynamic A/B Testing Analysis Framework
+# 📘 Practical A/B Testing Theory and Design Guide
 
 > **How to use these docs**
 >
 > * Use `README.md` as your primary entry point for the package: what the framework does, how to configure it, and example usage.
-> * Use this `AB_TESTING_THEORY.md` file when you want the underlying statistical theory: detailed formulas, derivations, design trade‑offs, and methodological justifications referenced from the README.
+> * Use this theory guide when you want the underlying statistical theory: detailed formulas, derivations, design trade‑offs, and methodological justifications referenced from the README.
 
 This document gathers the **statistical theory and methodology** that underpins the framework in `README.md`.
 
@@ -112,7 +112,7 @@ Both choices are legitimate, but they answer **slightly different questions** an
 * Your primary metrics are **user-centric** (engagement, satisfaction, retention)
 * You care about a **stable, predictable** experience for the same person
 * Conversations for the same user are clearly **not independent** (very common)
-
+ 
 If you randomize by `user_id`, you should also **analyze metrics at user level** (aggregate conversation data per user before running tests).
 
 ### Option 2: Randomize by `session_id`
@@ -218,7 +218,7 @@ Let:
 Approximate **standard error** of a proportion near baseline $p$ (for planning):
 
 $$
-\text{SE}(p) \approx \sqrt{\frac{p(1-p)}{n}}
+	ext{SE}(p) \approx \sqrt{\frac{p(1-p)}{n}}
 $$
 
 For the **difference in proportions** during analysis, we use a pooled standard error and compute a z‑statistic:
@@ -240,7 +240,7 @@ Let:
 The **standard error of the mean** is approximately:
 
 $$
-\text{SE}(\mu) \approx \frac{s}{\sqrt{n}}
+	ext{SE}(\mu) \approx \frac{s}{\sqrt{n}}
 $$
 
 For the difference in means, we use a (Welch) **t‑test**:
@@ -382,24 +382,24 @@ An A/A test is like a **pre-flight check** before taking off. You wouldn't fly a
 Consider these real-world failure modes that A/A tests catch:
 
 1. **Silent randomization bugs**
-   - Example: "New users always get treatment, returning users get control"
-   - Impact: Results are completely invalid, but you won't know without A/A testing
-   - A/A test catches it: You'll see systematic differences where there should be none
+    - Example: "New users always get treatment, returning users get control"
+    - Impact: Results are completely invalid, but you won't know without A/A testing
+    - A/A test catches it: You'll see systematic differences where there should be none
 
 2. **Data pipeline issues**
-   - Example: "Treatment events are logged with 50ms extra latency due to a subtle code path"
-   - Impact: Appears treatment is slower, but it's just measurement bias
-   - A/A test catches it: Performance metrics show artificial differences
+    - Example: "Treatment events are logged with 50ms extra latency due to a subtle code path"
+    - Impact: Appears treatment is slower, but it's just measurement bias
+    - A/A test catches it: Performance metrics show artificial differences
 
 3. **Metric calculation bugs**
-   - Example: "Control uses cached aggregation, treatment computes fresh (both should be identical)"
-   - Impact: Metrics differ due to implementation, not user behavior
-   - A/A test catches it: Same data produces different metric values
+    - Example: "Control uses cached aggregation, treatment computes fresh (both should be identical)"
+    - Impact: Metrics differ due to implementation, not user behavior
+    - A/A test catches it: Same data produces different metric values
 
 4. **Unknown variance**
-   - Example: "Historical data says variance = 0.5, but actual system has variance = 0.8"
-   - Impact: Your power calculations are wrong, experiment runs too short
-   - A/A test provides: Accurate variance from your actual system
+    - Example: "Historical data says variance = 0.5, but actual system has variance = 0.8"
+    - Impact: Your power calculations are wrong, experiment runs too short
+    - A/A test provides: Accurate variance from your actual system
 
 **Cost of NOT doing A/A testing:**
 
@@ -421,37 +421,37 @@ Even with correct statistical tests, an experiment can silently break if **traff
 We therefore recommend treating **daily traffic monitoring** as a first‑class part of your experimentation practice:
 
 1. **Daily variant counts**  
-   Track per‑day counts of randomized units by variant, e.g. $n_A(d)$ and $n_B(d)$ for day $d$.
-   * Compare $n_A(d) + n_B(d)$ against an expected range from historical traffic.
-   * Alert if total traffic drops sharply (e.g., < 70–80% of expectation) or is near zero.
-   * Alert if only one variant receives traffic (e.g., $n_A(d) = 0$, $n_B(d) > 0$), which indicates an assignment bug.
+    Track per‑day counts of randomized units by variant, e.g. $n_A(d)$ and $n_B(d)$ for day $d$.
+    * Compare $n_A(d) + n_B(d)$ against an expected range from historical traffic.
+    * Alert if total traffic drops sharply (e.g., < 70–80% of expectation) or is near zero.
+    * Alert if only one variant receives traffic (e.g., $n_A(d) = 0$, $n_B(d) > 0$), which indicates an assignment bug.
 
 2. **Cumulative growth sanity check**  
-   Plot cumulative sample sizes $n_A^{\text{cum}}(d)$ and $n_B^{\text{cum}}(d)$ over calendar time.
-   * They should be **monotone increasing** while the experiment is live.
-   * If the cumulative curves **plateau** while your application still has normal traffic, this is a strong signal that logging or assignment has broken.
+    Plot cumulative sample sizes $n_A^{\text{cum}}(d)$ and $n_B^{\text{cum}}(d)$ over calendar time.
+    * They should be **monotone increasing** while the experiment is live.
+    * If the cumulative curves **plateau** while your application still has normal traffic, this is a strong signal that logging or assignment has broken.
 
 3. **Allocation ratio monitoring**  
-   Monitor the realized allocation ratio
-   $$
-   r(d) = \frac{n_A^{\text{cum}}(d)}{n_A^{\text{cum}}(d) + n_B^{\text{cum}}(d)}
-   $$
-   * For a 70/30 experiment (as in the illustrative plot), $r(d)$ should stay close to $0.7$; large or sudden deviations suggest randomization or routing bugs.
-   * This is the same idea as an **SRM (Sample Ratio Mismatch)** check, but viewed as a time series.
+    Monitor the realized allocation ratio
+    $$
+    r(d) = \frac{n_A^{\text{cum}}(d)}{n_A^{\text{cum}}(d) + n_B^{\text{cum}}(d)}
+    $$
+    * For a 70/30 experiment (as in the illustrative plot), $r(d)$ should stay close to $0.7$; large or sudden deviations suggest randomization or routing bugs.
+    * This is the same idea as an **SRM (Sample Ratio Mismatch)** check, but viewed as a time series.
 
 ![alt text](routing_bug.png)
 
 In the provided graph, a simulated "routing bug" is introduced around Day 21 for a planned **70/30 traffic split**. You can see the ratio begin to drift away from the $0.7$ baseline and eventually leave the gray ±3σ band that represents normal random noise. Such sudden or sustained deviations are strong indicators of a randomization failure, sample ratio mismatch (SRM), or a bug in the assignment logic
 
 4. **Missing / malformed assignment and metrics**  
-   Track the fraction of rows with missing or invalid `variant_label` or corrupted metric fields.
-   * Sudden spikes indicate issues in upstream tagging or data pipelines.
-   * This is especially important when rolling out new logging code alongside experiments.
+    Track the fraction of rows with missing or invalid `variant_label` or corrupted metric fields.
+    * Sudden spikes indicate issues in upstream tagging or data pipelines.
+    * This is especially important when rolling out new logging code alongside experiments.
 
 5. **“Is today’s sample good enough?”**  
-   Per‑day cuts are often **not individually powered**; what matters is that cumulative sample size eventually reaches the planned requirement from Section 4. Still, daily samples should not be pathologically small:
-   * For proportion metrics, a common rule of thumb is $p \cdot n$ and $(1-p) \cdot n$ both ≥ 5–10 per variant if you want to interpret a daily estimate.
-   * In practice, many teams only treat daily cuts as **diagnostic** when there are at least a few hundred units per variant.
+    Per‑day cuts are often **not individually powered**; what matters is that cumulative sample size eventually reaches the planned requirement from Section 4. Still, daily samples should not be pathologically small:
+    * For proportion metrics, a common rule of thumb is $p \cdot n$ and $(1-p) \cdot n$ both ≥ 5–10 per variant if you want to interpret a daily estimate.
+    * In practice, many teams only treat daily cuts as **diagnostic** when there are at least a few hundred units per variant.
 
 Together, these checks answer two operational questions:
 
@@ -657,9 +657,9 @@ Expected: 500 control, 500 treatment (N = 1000)
 Observed: 450 control, 550 treatment
 
 χ² = (450 - 500)² / 500 + (550 - 500)² / 500
-   = 2500 / 500 + 2500 / 500
-   = 5.0 + 5.0
-   = 10.0
+    = 2500 / 500 + 2500 / 500
+    = 5.0 + 5.0
+    = 10.0
 
 With 1 degree of freedom:
 p-value ≈ 0.0016
@@ -706,9 +706,9 @@ Expected: 700 control, 300 treatment (N = 1000)
 Observed: 680 control, 320 treatment
 
 χ² = (680 - 700)² / 700 + (320 - 300)² / 300
-   = 400 / 700 + 400 / 300
-   = 0.571 + 1.333
-   = 1.904
+    = 400 / 700 + 400 / 300
+    = 0.571 + 1.333
+    = 1.904
 
 p-value ≈ 0.168 → No SRM (within normal variation)
 ```
@@ -721,11 +721,11 @@ The framework accepts an `allocation_ratio` parameter (the proportion allocated 
 2. Calculates the χ² statistic comparing observed vs expected counts
 3. Derives the p-value from the χ² distribution with 1 degree of freedom
 4. Returns a comprehensive result containing:
-   - Boolean pass/fail indicator
-   - Exact p-value and chi-square statistic
-   - Observed and expected counts per variant
-   - Percentage deviations from expected
-   - Human-readable recommendation for action
+    - Boolean pass/fail indicator
+    - Exact p-value and chi-square statistic
+    - Observed and expected counts per variant
+    - Percentage deviations from expected
+    - Human-readable recommendation for action
 
 #### Per-day SRM monitoring
 
@@ -765,10 +765,10 @@ If $p_\text{SRM}$ is very small (e.g., $< 0.001$), the imbalance is **extremely 
 
 1. **STOP** analyzing metrics immediately
 2. **INVESTIGATE** root causes:
-   - Randomization logic bugs
-   - Data pipeline filtering
-   - Technical issues (bot traffic, caching)
-   - Variant-specific crashes
+    - Randomization logic bugs
+    - Data pipeline filtering
+    - Technical issues (bot traffic, caching)
+    - Variant-specific crashes
 3. **FIX** the underlying issue
 4. **RESTART** the experiment after validation
 
@@ -857,7 +857,7 @@ The **primary metric** is the single success criterion that must show statistica
 **Decision logic**:
 
 $$
-\text{Ship} \iff \text{(primary improved significantly)} \land \text{(no guardrail degraded significantly)}
+	ext{Ship} \iff \text{(primary improved significantly)} \land \text{(no guardrail degraded significantly)}
 $$
 
 #### Diagnostic metrics
@@ -1045,10 +1045,10 @@ This separation of concerns (statistics vs. business vs. data quality) is centra
 This section tracks topics that we plan to elaborate on in future iterations of the theory docs. They are intentionally left as placeholders for deeper explanations, examples, and references.
 
 1. **When to use a two‑proportion z‑test vs. a Welch t‑test**  
-    At a high level, the current framework uses proportion tests for rate metrics (e.g., conversion, CTR) and Welch’s t‑test for continuous metrics (e.g., revenue per user, time). We plan to add a dedicated subsection clarifying **borderline cases** and **practical decision rules**, including:
-    * How to reason about metrics that are proportions but derived from user‑level aggregates.
-    * When normal approximations for proportions are reliable vs. when you should fall back to t‑tests on transformed or aggregated data.
-    * Concrete numerical examples comparing the two approaches on the same dataset.
+     At a high level, the current framework uses proportion tests for rate metrics (e.g., conversion, CTR) and Welch’s t‑test for continuous metrics (e.g., revenue per user, time). We plan to add a dedicated subsection clarifying **borderline cases** and **practical decision rules**, including:
+     * How to reason about metrics that are proportions but derived from user‑level aggregates.
+     * When normal approximations for proportions are reliable vs. when you should fall back to t‑tests on transformed or aggregated data.
+     * Concrete numerical examples comparing the two approaches on the same dataset.
 
 Additional TODO items can be added here as the framework evolves.
 

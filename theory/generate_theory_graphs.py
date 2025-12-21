@@ -1,3 +1,16 @@
+"""Generate all illustrative figures used in AB_TESTING_THEORY.md.
+
+Each function below produces a single PNG file that is embedded in the
+theory document. The goal is to turn the abstract formulas and
+definitions (MDE, power, α, SRM, Type I/II errors) into concrete,
+visual examples with fixed numerical assumptions that match the text.
+
+Run this module as a script from the repository root:
+
+    python theory/generate_theory_graphs.py
+
+"""
+
 import pathlib
 
 import numpy as np
@@ -6,11 +19,22 @@ from scipy.stats import norm
 
 
 def generate_routing_bug_plot(output_path: pathlib.Path) -> None:
-    """Generate a routing-bug style SRM graph for the traffic monitoring section.
+    """Simulate a routing bug / SRM for a 70/30 traffic split.
 
-    The plot shows the cumulative allocation ratio over days with a
-    subtle but growing deviation from the 70/30 baseline starting
-    around day 21, mimicking a routing bug or SRM.
+    This plot corresponds to the SRM example in the "Traffic and Data
+    Quality Monitoring" section. It constructs a *toy* experiment where:
+
+    * The intended allocation to variant A is 70% (target_ratio = 0.7).
+    * For the first ~20 days, the realized cumulative ratio fluctuates
+        randomly around 0.7.
+    * Starting at day 21, a synthetic "bug" gradually pushes more
+        traffic into A, so the cumulative ratio drifts upward.
+
+    The gray band is an approximate ±3σ confidence band around 0.7
+    under a healthy system with steadily increasing cumulative user
+    counts. When the blue line exits this band and keeps drifting, it
+    visually indicates a sample-ratio mismatch that would be picked up
+    by SRM checks.
     """
 
     rng = np.random.default_rng(42)
@@ -25,7 +49,7 @@ def generate_routing_bug_plot(output_path: pathlib.Path) -> None:
     # Introduce a gradual drift starting at day 21
     bug_start_day = 21
     drift_length = days.size - (bug_start_day - 1)
-    drift = np.linspace(0.0, 0.12, drift_length)  # up to ~0.62
+    drift = np.linspace(0.0, 0.12, drift_length)  # up to ~0.82
 
     ratio = base_ratio.copy()
     ratio[bug_start_day - 1 :] += drift
@@ -47,12 +71,12 @@ def generate_routing_bug_plot(output_path: pathlib.Path) -> None:
     lower = p0 - band
     upper = p0 + band
     ax.fill_between(
-        days,
-        lower,
-        upper,
-        color="gray",
-        alpha=0.12,
-        label="Approx. ±3σ band (no bug)",
+            days,
+            lower,
+            upper,
+            color="gray",
+            alpha=0.12,
+            label="Approx. ±3σ band (no bug)",
     )
 
     ax.axvspan(bug_start_day, days[-1], color="red", alpha=0.05)
@@ -72,10 +96,20 @@ def generate_routing_bug_plot(output_path: pathlib.Path) -> None:
 
 
 def generate_sample_size_vs_mde_plot(output_path: pathlib.Path) -> None:
-    """Visualize how required sample size per group grows as MDE shrinks.
+    """Sample size per variant as a function of MDE (proportion metric).
 
-    Uses the same approximate formula as in Section 3.C for
-    proportion metrics, with a fixed baseline rate and (alpha, power).
+    This implements the planning formula from Section 3.C for a
+    two-variant proportion test with:
+
+    * Baseline rate p = 3.2%.
+    * Significance level α = 0.05.
+    * Power = 0.80.
+
+    The x-axis varies the *relative* MDE (from 2% to 30% lift over the
+    baseline), which we convert into an absolute difference. The
+    y-axis is the required sample size per variant. The red annotated
+    point shows a typical configuration used in the docs: detecting a
+    10% relative lift and the corresponding users per variant.
     """
 
     # Parameters chosen to match the narrative in the doc
@@ -124,10 +158,19 @@ def generate_sample_size_vs_mde_plot(output_path: pathlib.Path) -> None:
 
 
 def generate_power_vs_sample_size_plot(output_path: pathlib.Path) -> None:
-    """Show how power increases with sample size for a fixed effect size.
+    """Power curve as a function of sample size for a fixed lift.
 
-    Uses a simple normal-approximation for a two-sided z-test for
-    difference in proportions, matching the planning setup in the doc.
+    This uses the normal approximation for a two-sided z-test on
+    proportions, with:
+
+    * Baseline rate p = 3.2%.
+    * Relative lift = 10%.
+    * Significance level α = 0.05.
+
+    The x-axis is the per-variant sample size, and the y-axis is the
+    resulting power (1 - β). The curve illustrates the "S-shape":
+    power grows quickly at small n, then exhibits diminishing returns
+    once you approach high power (e.g. 0.8–0.9).
     """
 
     alpha = 0.05
@@ -166,86 +209,90 @@ def generate_power_vs_sample_size_plot(output_path: pathlib.Path) -> None:
 
 
 def generate_type1_type2_plot(output_path: pathlib.Path) -> None:
-        """Illustrate Type I and Type II error regions for a z-test.
+    """Visualize Type I (α) and Type II (β) errors on z-scales.
 
-        The x-axis is a **standardized test statistic** (z-score):
-        0 means "no difference" under the null, and ±2 means the
-        observed result is two standard deviations away from the null
-        mean. The blue curve is the null distribution (no effect), the
-        orange curve is an alternative distribution with a true effect
-        shifted by `delta` standard deviations, and the vertical dashed
-        lines at ±z_{α/2} show the decision thresholds for a two-sided
-        test with α = 0.05.
+    This figure draws two normal curves over the same standardized
+    x-axis (the test statistic / z-score):
 
-        Shaded regions:
-        * Under the null (blue), the tails beyond the thresholds are the
-            **Type I error (α)** regions: false positives.
-        * Under the alternative (orange), the area that still falls
-            between the thresholds is the **Type II error (β)** region:
-            false negatives.
-        """
+    * Blue: the null distribution, centered at 0 (no effect).
+    * Orange: an alternative distribution, centered at delta = 2
+      standard deviations to the right (a true positive lift).
 
-        alpha = 0.05
-        z_alpha_over_2 = norm.ppf(1 - alpha / 2)
+    For a two-sided test with α = 0.05, we place critical values at
+    ±z_{α/2}. Under the null (blue), the tails beyond these cutoffs
+    are the Type I error regions (false positives). Under the
+    alternative (orange), the central area between the cutoffs is the
+    Type II error region (false negatives). This visually connects the
+    abstract definitions of α and β to concrete areas under the two
+    curves.
+    """
 
-        # Effect size under alternative in SD units
-        delta = 2.0
+    alpha = 0.05
+    z_alpha_over_2 = norm.ppf(1 - alpha / 2)
 
-        x = np.linspace(-5, 7, 800)
-        null_pdf = norm.pdf(x, loc=0.0, scale=1.0)
-        alt_pdf = norm.pdf(x, loc=delta, scale=1.0)
+    # Effect size under alternative in SD units
+    delta = 2.0
 
-        fig, ax = plt.subplots(figsize=(8, 4.5))
+    x = np.linspace(-5, 7, 800)
+    null_pdf = norm.pdf(x, loc=0.0, scale=1.0)
+    alt_pdf = norm.pdf(x, loc=delta, scale=1.0)
 
-        ax.plot(x, null_pdf, label="Null distribution (no effect)", color="#1f77b4")
-        ax.plot(x, alt_pdf, label="Alternative distribution (true effect)", color="#ff7f0e")
+    fig, ax = plt.subplots(figsize=(8, 4.5))
 
-        # Shade Type I error regions under null beyond critical values
-        ax.fill_between(x, 0, null_pdf, where=(x <= -z_alpha_over_2), color="#1f77b4", alpha=0.15)
-        ax.fill_between(x, 0, null_pdf, where=(x >= z_alpha_over_2), color="#1f77b4", alpha=0.15, label="Type I error (α)")
+    ax.plot(x, null_pdf, label="Null distribution (no effect)", color="#1f77b4")
+    ax.plot(x, alt_pdf, label="Alternative distribution (true effect)", color="#ff7f0e")
 
-        # Choose a sample size so that power is ~0.8
-        # Solve approximately: delta_eff = delta, want non-centrality ~ z_alpha/2 + z_beta
-        z_beta = norm.ppf(0.8)
-        # For illustration we can mark the β region with respect to the same critical values
-        ax.fill_between(
-                x,
-                0,
-                alt_pdf,
-                where=(x > -z_alpha_over_2) & (x < z_alpha_over_2),
-                color="#ff7f0e",
-                alpha=0.15,
-                label="Type II error (β)",
-        )
+    # Shade Type I error regions under null beyond critical values
+    ax.fill_between(x, 0, null_pdf, where=(x <= -z_alpha_over_2), color="#1f77b4", alpha=0.15)
+    ax.fill_between(x, 0, null_pdf, where=(x >= z_alpha_over_2), color="#1f77b4", alpha=0.15, label="Type I error (α)")
 
-        ax.axvline(-z_alpha_over_2, color="gray", linestyle="--", linewidth=1.0)
-        ax.axvline(z_alpha_over_2, color="gray", linestyle="--", linewidth=1.0)
+    # Mark the β region: where the alternative still falls inside the
+    # acceptance region defined by the same cutoffs.
+    z_beta = norm.ppf(0.8)
+    ax.fill_between(
+        x,
+        0,
+        alt_pdf,
+        where=(x > -z_alpha_over_2) & (x < z_alpha_over_2),
+        color="#ff7f0e",
+        alpha=0.15,
+        label="Type II error (β)",
+    )
 
-        ax.set_xlabel("Test statistic (standardized)")
-        ax.set_ylabel("Density")
-        ax.set_title("Type I (α) and Type II (β) error regions")
+    ax.axvline(-z_alpha_over_2, color="gray", linestyle="--", linewidth=1.0)
+    ax.axvline(z_alpha_over_2, color="gray", linestyle="--", linewidth=1.0)
 
-        ax.legend(loc="upper right")
-        ax.grid(True, linestyle=":", linewidth=0.5, alpha=0.7)
-        fig.tight_layout()
+    ax.set_xlabel("Test statistic (standardized)")
+    ax.set_ylabel("Density")
+    ax.set_title("Type I (α) and Type II (β) error regions")
 
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(output_path, dpi=150)
-        plt.close(fig)
+    ax.legend(loc="upper right")
+    ax.grid(True, linestyle=":", linewidth=0.5, alpha=0.7)
+    fig.tight_layout()
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
 
 
 def generate_sample_size_vs_power_alpha_plot(output_path: pathlib.Path) -> None:
-    """Show how required sample size changes with α and power.
+    """Required sample size vs. power for several α choices.
 
-    We fix a baseline rate and a relative MDE (10% lift) and
-    compute the required sample size per variant for different
-    combinations of:
+    This plot keeps the baseline rate and effect size fixed:
 
-    * Significance level α ∈ {0.10, 0.05, 0.01}
-    * Power ranging from 0.6 to 0.95
+    * Baseline p = 3.2%.
+    * Relative MDE = 10%.
 
-    This makes it visually clear that choosing a **stricter α** or
-    **higher power** always requires **more users per variant**.
+    For each α in {0.10, 0.05, 0.01} and power ∈ [0.6, 0.95], we use
+    the same two-proportion sample-size formula as in
+    generate_sample_size_vs_mde_plot to compute the required sample
+    size per variant. Each curve therefore answers:
+
+    "If I want this power and this α for a 10% lift over 3.2%, how
+    many users per variant do I need?"
+
+    The figure makes it explicit that stricter α (smaller values) and
+    higher power always increase the required sample size.
     """
 
     p = 0.032  # 3.2% baseline conversion rate

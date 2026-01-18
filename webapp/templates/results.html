@@ -597,10 +597,44 @@
       {% if experiment %}
         <div class="results-header-row">
           <div class="results-header-block">
-            <h2 class="results-subheading">Experiment context</h2>
+            <h2 class="results-subheading">Experiment Setup</h2>
             <p class="results-subtitle">
               <strong>Name:</strong> {{ experiment.name }}
             </p>
+            {% if experiment.allocation_ratio is not none %}
+            <p class="results-subtitle">
+              <strong>Traffic split:</strong>
+              {{ "%.0f" | format((1 - experiment.allocation_ratio) * 100) }}% control / {{ "%.0f" | format(experiment.allocation_ratio * 100) }}% treatment
+              {% if experiment.allocation_ratio != 0.5 %}
+                (unequal split)
+              {% endif %}
+            </p>
+            {% endif %}
+            <p class="results-subtitle">
+              <strong>Statistical plan:</strong>
+              {% if experiment.mde_relative is not none and experiment.power is not none %}
+                target uplift {{ "%.1f" | format(experiment.mde_relative * 100) }}%,
+                power {{ "%.0f" | format(experiment.power * 100) }}%,
+                α = {{ experiment.alpha }}
+              {% else %}
+                α = {{ experiment.alpha }}, power = {{ experiment.power }}
+              {% endif %}
+            </p>
+            {% if experiment.planned_per_variant is not none %}
+            <p class="results-subtitle">
+              <strong>Planned sample size:</strong>
+              {{ experiment.planned_per_variant }} {{ primary_unit_label or 'conversations' }} per variant
+              ({{ experiment.planned_per_variant * 2 }} total)
+            </p>
+            {% endif %}
+            {% if experiment.planned_days is not none %}
+            <p class="results-subtitle">
+              <strong>Planned duration:</strong> ~{{ experiment.planned_days }} days
+            </p>
+            {% endif %}
+          </div>
+          <div class="results-header-block">
+            <h2 class="results-subheading">Experiment Progress</h2>
             <p class="results-subtitle">
               <strong>Status:</strong> {{ experiment.status }}
             </p>
@@ -615,56 +649,24 @@
               ~{{ current_total_n }} {{ primary_unit_label or 'conversations' }}
             </p>
             {% endif %}
-            {% if experiment.allocation_ratio is not none %}
-            <p class="results-subtitle">
-              <strong>Traffic split:</strong>
-              {{ "%.0f" | format((1 - experiment.allocation_ratio) * 100) }}% control / {{ "%.0f" | format(experiment.allocation_ratio * 100) }}% treatment
-              {% if experiment.allocation_ratio != 0.5 %}
-                (unequal split)
-              {% endif %}
-            </p>
-            {% endif %}
-          </div>
-          <div class="results-header-block">
-            <h2 class="results-subheading">Experiment setup & progress</h2>
-            {% if experiment.planned_per_variant is not none %}
-            <p class="results-subtitle">
-              <strong>Planned sample size:</strong>
-              {{ experiment.planned_per_variant }} {{ primary_unit_label or 'conversations' }} per variant
-              ({{ experiment.planned_per_variant * 2 }} total)
-            </p>
-            {% endif %}
-            {% if experiment.planned_days is not none %}
-            <p class="results-subtitle">
-              <strong>Planned duration:</strong> ~{{ experiment.planned_days }} days
-            </p>
-            {% endif %}
-            <p class="results-subtitle">
-              <strong>Statistical plan:</strong>
-              {% if experiment.mde_relative is not none and experiment.power is not none %}
-                target uplift {{ "%.1f" | format(experiment.mde_relative * 100) }}%,
-                power {{ "%.0f" | format(experiment.power * 100) }}%,
-                α = {{ experiment.alpha }}
-              {% else %}
-                α = {{ experiment.alpha }}, power = {{ experiment.power }}
-              {% endif %}
-            </p>
             {% if srm_result %}
             <p class="results-subtitle {% if not srm_result.passed %}results-subtitle-warning{% endif %}" style="{% if not srm_result.passed %}background: #fff3cd; padding: 8px 12px; border-left: 4px solid #dc3545; margin-top: 8px;{% endif %}">
               <strong>🔍 Randomization Quality (SRM Check):</strong>
               {% if srm_result.passed %}
-                <span style="color: #28a745; font-weight: 600;">✅ Passed</span> - Randomization working correctly
+                <span style="color: #28a745; font-weight: 600;">✅ Passed</span>
               {% else %}
-                <span style="color: #dc3545; font-weight: 700;">⚠️ FAILED - STOP EXPERIMENT</span><br>
-                <span style="font-size: 13px; color: #856404;">{{ srm_result.recommendation }}</span><br>
-                <strong style="color: #721c24;">⛔ Do not trust metric results until randomization is fixed!</strong>
+                <span style="color: #dc3545; font-weight: 700;">⚠️ FAILED - STOP EXPERIMENT</span>
               {% endif %}
               <button type="button" class="metric-explain-link" onclick="openSrmExplainModal(event)" style="margin-left: 4px;">
                 What is SRM?
               </button>
             </p>
             {% endif %}
-            {% if stop_recommended %}
+            {% if srm_result and not srm_result.passed %}
+            <p class="results-subtitle results-subtitle-warning" style="background: #fff3cd; padding: 12px; border-left: 4px solid #dc3545; margin-top: 8px;">
+              ⛔ <strong>Recommendation:</strong> {{ srm_result.recommendation }} Do not trust metric results until randomization is fixed!
+            </p>
+            {% elif stop_recommended %}
             <p class="results-subtitle">
               ✅ <strong>Recommendation:</strong> You have reached the planned sample size
               and duration. It is reasonable to stop the experiment and

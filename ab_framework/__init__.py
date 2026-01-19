@@ -25,12 +25,13 @@ Example:
 __version__ = "0.1.0"
 
 from .core import ABTest
-from .backends import OwlBackend, StatisticalBackend
+from .backends import ScipyBackend, OwlBackend, StatisticalBackend
 from .quality import QualityChecker
 
 __all__ = [
     'ABTest',
-    'OwlBackend',
+    'ScipyBackend',
+    'OwlBackend', 
     'StatisticalBackend',
     'QualityChecker',
 ]

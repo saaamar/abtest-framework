@@ -1,13 +1,11 @@
-# Packages to test
-abexp
-owl_ab_test
-
-# owl-ab-test  # Will check availability
-# py-ab-testing  # Will check availability
-
-# Core dependencies
+# Core dependencies (required)
 numpy
 pandas
+scipy
+
+# Optional AB testing packages (for specialized backends)
+# abexp                 # For AbexpBackend
+# owl_ab_test          # For OwlBackend
 scipy
 
 # Optional: for visualization and reporting

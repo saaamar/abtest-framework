@@ -5,10 +5,14 @@ This guide explains how to integrate with the AB Testing Framework for UI develo
 ## Quick Reference
 
 ### What You Need to Provide (Inputs):
-- **Data table** with rows of individual sessions/conversations
-- **Group assignments** (each row labeled as control or treatment)
-- **Outcome measurements** (quality scores, resolution flags, etc. for each session)
-- **Metric calculations** (how to compute rates from the raw data)
+- **Raw data** containing:
+  - Individual sessions/conversations (one row per interaction)
+  - Group assignments (each row labeled as control or treatment)
+  - Outcome measurements (quality scores, resolution flags, etc. for each session)
+- **Metric calculations** (business rules that process your raw data):
+  - *What constitutes success?* (e.g., "conversation had at least one quality answer")
+  - *How to aggregate?* (e.g., "percentage of conversations that succeeded")
+  - *What's the primary decision metric?* vs *what's just monitoring?*
 - **Test parameters** (significance level, desired power, minimum effect size)
 
 ### What You Get Back (Outputs):
@@ -18,6 +22,28 @@ This guide explains how to integrate with the AB Testing Framework for UI develo
 - **Sample adequacy** (do you have enough data to trust the results?)
 - **Data validation** (are the groups properly randomized?)
 - **Decision summary** (launch/don't launch recommendation with evidence)
+
+## Process Flow
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Raw Data      │    │ Metric          │    │ Statistical     │    │    Results      │
+│                 │───▶│ Calculations    │───▶│ Analysis        │───▶│                 │
+│ • Sessions      │    │                 │    │                 │    │ • Significance  │
+│ • Groups        │    │ • Business      │    │ • Hypothesis    │    │ • Effect Size   │
+│ • Outcomes      │    │   Rules         │    │   Testing       │    │ • Confidence    │
+│                 │    │ • Aggregation   │    │ • Power Calc    │    │ • Decisions     │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+
+1. Your System           2. You Define        3. Framework Does    4. Framework Returns
+   Provides                These Functions      This Automatically   These Results
+```
+
+**Step-by-Step:**
+1. **Data Collection**: Your system captures individual interactions (sessions, clicks, outcomes) with A/B group assignments
+2. **Metric Definition**: You write business rules that transform raw data into meaningful KPIs ("% conversations with quality answers")  
+3. **Statistical Processing**: Framework applies hypothesis testing, calculates confidence intervals, validates randomization
+4. **Decision Support**: Framework returns significance tests, effect sizes, and recommendations for launch decisions
 
 ## Overview
 

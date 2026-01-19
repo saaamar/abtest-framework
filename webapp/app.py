@@ -132,12 +132,17 @@ def create_app():
                 alpha=alpha,
             )
 
+            # Convert allocation_ratio (% to treatment) to ratio (treatment:control)
+            # allocation_ratio=0.3 means 30% treatment, 70% control
+            # ratio = treatment/control = 0.3/0.7 = 0.43
+            ratio = allocation_ratio / (1 - allocation_ratio) if allocation_ratio < 1.0 else 1.0
+
             ssz = ab.backend.sample_size_proportion(
                 baseline_rate=baseline_rate,
                 mde=mde_relative,
                 alpha=alpha,
                 power=power,
-                ratio=1.0,
+                ratio=ratio,
             )
 
             # backend returns total_size / control_size; mirror demo semantics

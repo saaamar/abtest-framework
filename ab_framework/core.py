@@ -6,7 +6,7 @@ import numpy as np
 from datetime import datetime
 import traceback
 
-from .backends import AbexpBackend, StatisticalBackend
+from .backends import ScipyBackend, StatisticalBackend
 from .quality import QualityChecker
 
 class ABTest:
@@ -64,7 +64,7 @@ class ABTest:
         self.data = data.copy()
         self.variant_col = variant_col
         self.unit_id = unit_id
-        self.backend = backend if backend is not None else AbexpBackend()
+        self.backend = backend if backend is not None else ScipyBackend()
         self.alpha = alpha
         # Allow callers (like the webapp) to control the analysis timestamp,
         # but default to "now" for backward compatibility.

@@ -376,7 +376,7 @@ def create_app():
                         variant_col="variant",
                         unit_id="user_id",
                         alpha=exp["alpha"],
-                        allocation_ratio=exp["allocation_ratio"] if exp["allocation_ratio"] is not None else 0.5,
+                        # allocation_ratio removed - data uses deterministic 50:50 hashing
                         timestamp=today_str,
                     )
 
@@ -526,7 +526,6 @@ def create_app():
                             variant_col="variant",
                             unit_id="user_id",
                             alpha=exp["alpha"],
-                            allocation_ratio=exp["allocation_ratio"] if exp["allocation_ratio"] is not None else 0.5,
                             timestamp=hist_day.isoformat(),
                         )
                         
@@ -585,8 +584,8 @@ def create_app():
                                 # Observed treatment-to-control ratio
                                 observed_tc = n_treatment / n_control
                                 
-                                # Expected allocation (from experiment config)
-                                allocation_ratio = exp["allocation_ratio"] if exp["allocation_ratio"] is not None else 0.5
+                                # Expected allocation (data generation is always 50:50)
+                                allocation_ratio = 0.5  # Fixed: data generation doesn't support actual allocation ratios
                                 expected_tc = allocation_ratio / (1 - allocation_ratio)
                                 
                                 # Calculate confidence interval for T/C ratio

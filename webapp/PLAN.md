@@ -74,8 +74,8 @@ Goal: Build a small Flask web app (in `webapp/` under repo root) to plan and mon
   - `power ∈ (0,1)` — **UI label:** "Power".
   - `mde_percent > 0` — **UI label:** "MDE (%)"; internally converted to relative lift:
     - `mde_relative = mde_percent / 100`.
-  - Optional `allocation_ratio ∈ (0,1)` (default 0.5) — treatment allocation (fraction of traffic sent to treatment).
-    In the framework, this maps to `ABTest.setup(treatment_fraction=...)`.
+  - Optional `treatment_fraction ∈ (0,1)` (default 0.5) — fraction of traffic sent to treatment.
+    If the UI field is named `allocation_ratio`, it should map to `ABTest.setup(treatment_fraction=...)`.
   - Optional `daily_per_variant > 0` (can be derived from recent data or user-entered).
   - Guard margin (optional): `inferiority_margin ≥ 0` (informational for NI checks in analysis).
 
@@ -137,8 +137,8 @@ Suggested schema (logical):
   - `alpha` REAL
   - `power` REAL
   - `mde_relative` REAL  -- stored as fraction (e.g. 0.05 for 5%)
-  - `allocation_ratio` REAL  -- treatment allocation (treatment traffic share, e.g. 0.5).
-    In the framework, this maps to `ABTest.setup(treatment_fraction=...)`.
+  - `treatment_fraction` REAL  -- treatment allocation (treatment traffic share, e.g. 0.5).
+    If the UI field is named `allocation_ratio`, it should map to this.
 
 - `experiment_metrics`
   - `id` INTEGER PRIMARY KEY

@@ -69,23 +69,38 @@ def get_recent_baseline_and_volume(primary_metric: str, days: int = 7) -> Tuple[
     # Build an A/A test and attach metrics; primary is quality_ratio
     test_aa = ABTest(
         name="agent_sessions_quality_vs_resolution_AA_webapp",
-        data=df_aa,
-        variant_col="variant",
-        unit_id="user_id",
+        variants=["A", "B"],
     )
+
+    observed_counts = df_aa.groupby("variant")["user_id"].nunique().to_dict()
 
     @test_aa.metric(metric_type="proportion", is_primary=True)
     def quality_ratio(data):
-        return data.groupby("user_id")["quality"].max()
+        user_level = data.groupby(["variant", "user_id"])["quality"].max()
+        out = {}
+        for variant in ["A", "B"]:
+            v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+            out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+        return out
 
     @test_aa.metric(metric_type="proportion")
     def resolved_ratio(data):
-        return data.groupby("user_id")["resolved"].max()
+        user_level = data.groupby(["variant", "user_id"])["resolved"].max()
+        out = {}
+        for variant in ["A", "B"]:
+            v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+            out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+        return out
 
-    aa_results = test_aa.analyze(run_srm_check=True, correction=None)
+    aa_results = test_aa.analyze(
+        df_aa,
+        run_srm_check=True,
+        observed_counts=observed_counts,
+        correction=None,
+    )
 
     # Take the control arm's value for the requested primary metric
-    metric_key = primary_metric if primary_metric in aa_results.metric_results else "quality_rate"
+    metric_key = primary_metric if primary_metric in aa_results.metric_results else "quality_ratio"
     metric_info = aa_results.metric_results.get(metric_key, {})
     baseline_rate = float(metric_info.get("control_value", 0.5))
 

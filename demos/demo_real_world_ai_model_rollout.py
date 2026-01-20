@@ -97,7 +97,15 @@ Split Decision Factors:
 """
     }
 
-def run_analysis_check(data, check_number, days_elapsed, target_lift, phase_name="CHECK"):
+def run_analysis_check(
+  data,
+  check_number,
+  days_elapsed,
+  target_lift,
+  phase_name="CHECK",
+  *,
+  expected_treatment_fraction: float = 0.5,
+):
     """
     Run a mid-experiment analysis check.
     
@@ -130,18 +138,33 @@ def run_analysis_check(data, check_number, days_elapsed, target_lift, phase_name
     
     # Run statistical test
     test = ABTest(
-        name=f"AI_Model_v2_Day{days_elapsed:.0f}",
-        data=data,
-        variant_col="variant",
-        unit_id="conversation_id"
+      name=f"AI_Model_v2_Day{days_elapsed:.0f}",
+      variants=["A", "B"],
     )
+    test.setup(treatment_fraction=expected_treatment_fraction)
     
     @test.metric(metric_type="mean")
     def ai_metric(data):
         """AI quality metric (0-5 continuous scale) - averaged per conversation."""
-        return data.groupby('conversation_id')['ai_metric'].mean()
+      conv_level = data.groupby(["variant", "conversation_id"])["ai_metric"].mean()
+      out = {}
+      for variant in ["A", "B"]:
+        v = conv_level.loc[variant] if variant in conv_level.index.get_level_values(0) else pd.Series(dtype=float)
+        n = int(v.shape[0])
+        out[variant] = {
+          "mean": float(v.mean()) if n else 0.0,
+          "std": float(v.std(ddof=1)) if n > 1 else 0.0,
+          "n": n,
+        }
+      return out
     
-    results = test.analyze(['ai_metric'])
+    observed_counts = data.groupby("variant")["conversation_id"].nunique().to_dict()
+    results = test.analyze(
+      data,
+      metrics=["ai_metric"],
+      run_srm_check=True,
+      observed_counts=observed_counts,
+    )
     
     print("\n" + results.summary())
     print("\n" + results.conclusion('ai_metric'))
@@ -221,7 +244,8 @@ aa_result = run_analysis_check(
     check_number=1,
     days_elapsed=7.0,
     target_lift=0.0,
-    phase_name="A/A TEST"
+  phase_name="A/A TEST",
+  expected_treatment_fraction=0.5,
 )
 
 print("\n" + "=" * 70)
@@ -311,8 +335,8 @@ print(f"  - Monitoring: Check every {check_frequency_days} days")
 
 # Calculate required sample size using A/A test parameters
 planning_test = ABTest(
-    name="planning_only",
-    data=aa_df_7days.head(2).assign(variant=["A", "B"]),
+  name="planning_only",
+  variants=["A", "B"],
 )
 sample_plan = planning_test.backend.sample_size_mean(
     baseline_mean=baseline_mean,
@@ -461,7 +485,8 @@ while check_day <= total_duration_days:
         check_number=check_number,
         days_elapsed=check_day,
         target_lift=target_lift,
-        phase_name="A/B CHECK"
+      phase_name="A/B CHECK",
+      expected_treatment_fraction=rollout_percent_b / 100.0,
     )
     check_results.append(check_result)
     
@@ -511,17 +536,32 @@ print("=" * 70)
 
 test_final = ABTest(
     name="AI_Model_v2_Final",
-    data=df_full,
-    variant_col="variant",
-    unit_id="conversation_id"
+  variants=["A", "B"],
 )
+test_final.setup(treatment_fraction=rollout_percent_b / 100.0)
 
 @test_final.metric(metric_type="mean")
 def ai_metric(data):
     """AI quality metric (0-5 continuous scale) - averaged per conversation."""
-    return data.groupby('conversation_id')['ai_metric'].mean()
+  conv_level = data.groupby(["variant", "conversation_id"])["ai_metric"].mean()
+  out = {}
+  for variant in ["A", "B"]:
+    v = conv_level.loc[variant] if variant in conv_level.index.get_level_values(0) else pd.Series(dtype=float)
+    n = int(v.shape[0])
+    out[variant] = {
+      "mean": float(v.mean()) if n else 0.0,
+      "std": float(v.std(ddof=1)) if n > 1 else 0.0,
+      "n": n,
+    }
+  return out
 
-results_final = test_final.analyze(['ai_metric'])
+observed_counts_final = df_full.groupby("variant")["conversation_id"].nunique().to_dict()
+results_final = test_final.analyze(
+  df_full,
+  metrics=["ai_metric"],
+  run_srm_check=True,
+  observed_counts=observed_counts_final,
+)
 
 print("\n" + results_final.summary())
 print("\n" + results_final.conclusion('ai_metric'))

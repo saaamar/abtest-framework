@@ -15,11 +15,13 @@ Features:
 
 Example:
     >>> from ab_framework import ABTest
-    >>> test = ABTest(name="homepage_redesign", data=df)
+    >>> test = ABTest(name="homepage_redesign", variants=["A", "B"])
     >>> @test.metric(metric_type="proportion")
     ... def conversion_rate(data):
-    ...     return data.groupby('user_id')['converted'].max()
-    >>> results = test.analyze(['conversion_rate'])
+    ...     per_user = data.groupby(['variant', 'user_id'])['converted'].max().reset_index()
+    ...     summary = per_user.groupby('variant')['converted'].agg(['sum', 'count']).to_dict('index')
+    ...     return {v: {'successes': int(d['sum']), 'n': int(d['count'])} for v, d in summary.items()}
+    >>> results = test.analyze(df, metrics=['conversion_rate'], run_srm_check=False)
 """
 
 __version__ = "0.1.0"

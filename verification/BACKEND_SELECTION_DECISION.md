@@ -719,7 +719,7 @@ if ratio != 1.0:
 
 **Long-term:**
 - Build complete `ScipyBackend` or `StatsmodelsBackend` as fallback
-- Switch backends via config: `ABTest(name="my_experiment", data=df, backend=ScipyBackend())`
+- Switch backends via config: `ABTest(name="my_experiment", variants=["A", "B"], backend=ScipyBackend())`
 
 ### 📊 **Implementation Priority**
 
@@ -776,7 +776,7 @@ if ratio != 1.0:
 - Uses AbexpBackend for all proportion/mean tests (current)
 - Falls back to statsmodels for accurate unequal allocation sample size
 - Maintains single consistent API regardless of implementation
-- OwlBackend available as alternative: `ABTest(name="my_experiment", data=df, backend=OwlBackend())`
+- OwlBackend available as alternative: `ABTest(name="my_experiment", variants=["A", "B"], backend=OwlBackend())`
 
 ---
 

@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any
-import numpy as np
 
 
 class StatisticalBackend(ABC):
@@ -54,15 +53,23 @@ class StatisticalBackend(ABC):
     @abstractmethod
     def mean_t_test(
         self,
-        values_a: np.ndarray,
-        values_b: np.ndarray,
+        mean_a: float,
+        std_a: float,
+        n_a: int,
+        mean_b: float,
+        std_b: float,
+        n_b: int,
         alpha: float = 0.05
     ) -> Dict[str, Any]:
         """Test difference in means (e.g., revenue, session duration).
         
         Args:
-            values_a: Array of values from control group
-            values_b: Array of values from treatment group
+            mean_a: Control mean
+            std_a: Control sample standard deviation
+            n_a: Control sample size
+            mean_b: Treatment mean
+            std_b: Treatment sample standard deviation
+            n_b: Treatment sample size
             alpha: Significance level (default 0.05)
         
         Returns:

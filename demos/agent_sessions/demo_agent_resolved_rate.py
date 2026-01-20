@@ -77,31 +77,34 @@ def main() -> None:
 
         test_aa = ABTest(
             name="agent_sessions_resolved_AA",
-            data=df_aa,
-            variant_col="variant",
-            unit_id="conversation_id",
+            variants=["A", "B"],
         )
 
         @test_aa.metric(metric_type="proportion")
         def resolved_rate(data):
             # One row per conversation, so this is effectively per-session
-            return data.groupby("conversation_id")["resolved"].max()
+            conv_level = data.groupby(["variant", "conversation_id"])["resolved"].max()
+            out = {}
+            for variant in ["A", "B"]:
+                v = conv_level.loc[variant] if variant in conv_level.index.get_level_values(0) else pd.Series(dtype=float)
+                out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+            return out
 
-        # Defensive check: ensure both variants have data for this metric
-        metric_values = resolved_rate(df_aa)
-        metric_df = metric_values.reset_index()
-        metric_df.columns = ["conversation_id", "metric_value"]
-        variants = df_aa[["conversation_id", "variant"]].drop_duplicates()
-        joined = metric_df.merge(variants, on="conversation_id", how="left")
-        counts = joined["variant"].value_counts().to_dict()
+        observed_counts_aa = df_aa.groupby("variant")["conversation_id"].nunique().to_dict()
 
-        if counts.get("A", 0) == 0 or counts.get("B", 0) == 0:
+        aa_results = None
+        if observed_counts_aa.get("A", 0) == 0 or observed_counts_aa.get("B", 0) == 0:
             print(
                 "Not enough conversations in both variants for resolved_rate in A/A; "
                 "skipping A/A analysis."
             )
         else:
-            aa_results = test_aa.analyze(["resolved_rate"], run_srm_check=True)
+            aa_results = test_aa.analyze(
+                df_aa,
+                metrics=["resolved_rate"],
+                run_srm_check=True,
+                observed_counts=observed_counts_aa,
+            )
             print(aa_results.summary())
         print("\nA/A interpretation:")
         print(
@@ -110,8 +113,10 @@ def main() -> None:
         )
 
         # Sample size planning based on A/A
-        quality_metric = aa_results.metric_results.get("resolved_rate", {})
-        baseline_rate = quality_metric.get("control_value", 0.0)
+        baseline_rate = 0.0
+        if aa_results is not None:
+            metric_info = aa_results.metric_results.get("resolved_rate", {})
+            baseline_rate = metric_info.get("control_value", 0.0)
         
         print("\n" + "-" * 70)
         print("SAMPLE SIZE PLANNING (Based on A/A Warmup)")
@@ -193,31 +198,33 @@ def main() -> None:
 
         test = ABTest(
             name=f"agent_resolved_rate_until_{day.isoformat()}",
-            data=current,
-            variant_col="variant",
-            unit_id="conversation_id",
+            variants=["A", "B"],
         )
 
         @test.metric(metric_type="proportion")
         def resolved_rate(data):
-            return data.groupby("conversation_id")["resolved"].max()
+            conv_level = data.groupby(["variant", "conversation_id"])["resolved"].max()
+            out = {}
+            for variant in ["A", "B"]:
+                v = conv_level.loc[variant] if variant in conv_level.index.get_level_values(0) else pd.Series(dtype=float)
+                out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+            return out
 
-        # Skip slices where one variant has no conversations
-        metric_values = resolved_rate(current)
-        metric_df = metric_values.reset_index()
-        metric_df.columns = ["conversation_id", "metric_value"]
-        variants = current[["conversation_id", "variant"]].drop_duplicates()
-        joined = metric_df.merge(variants, on="conversation_id", how="left")
-        counts = joined["variant"].value_counts().to_dict()
+        observed_counts = current.groupby("variant")["conversation_id"].nunique().to_dict()
 
-        if counts.get("A", 0) == 0 or counts.get("B", 0) == 0:
+        if observed_counts.get("A", 0) == 0 or observed_counts.get("B", 0) == 0:
             print(
                 f"\nDAY {day.isoformat()} - Skipping resolved_rate: "
                 "one of the variants has no conversations yet."
             )
             continue
 
-        results = test.analyze(["resolved_rate"], run_srm_check=True)
+        results = test.analyze(
+            current,
+            metrics=["resolved_rate"],
+            run_srm_check=True,
+            observed_counts=observed_counts,
+        )
 
         # Progress tracking
         days_elapsed = (day - experiment_start).days + 1

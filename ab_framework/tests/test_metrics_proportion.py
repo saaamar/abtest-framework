@@ -41,18 +41,18 @@ def test_scenario1_conversion_synthetic():
 	# print(df[filter_b].describe())
 	# ------------------------------------------------------------------
 
-	test = ABTest(
-		name="scenario1_conversion",
-		data=df,
-		variant_col="variant",
-		unit_id="user_id",
-	)
+	test = ABTest(name="scenario1_conversion", variants=["A", "B"])
 
 	@test.metric(metric_type="proportion")
 	def conversion_rate(data):
-		return data.groupby("user_id")["converted"].max()
+		per_user = data.groupby(["variant", "user_id"])["converted"].max().reset_index()
+		summary = per_user.groupby("variant")["converted"].agg(["sum", "count"]).to_dict("index")
+		return {
+			v: {"successes": int(d["sum"]), "n": int(d["count"])}
+			for v, d in summary.items()
+		}
 
-	results = test.analyze(["conversion_rate"])
+	results = test.analyze(df, metrics=["conversion_rate"], run_srm_check=False)
 	result = results.metric_results["conversion_rate"]
 	assert "p_value" in result
 	assert 0 <= result["p_value"] <= 1
@@ -94,19 +94,18 @@ def test_scenario3_ctr_synthetic():
 	# print(df[filter_b].describe())
 	# ------------------------------------------------------------------
 
-	test = ABTest(
-		name="scenario3_ctr",
-		data=df,
-		variant_col="variant",
-		unit_id="impression_id",  # Event-level!
-	)
+	test = ABTest(name="scenario3_ctr", variants=["A", "B"])
 
 	@test.metric(metric_type="proportion")
 	def click_through_rate(data):
 		"""CTR at impression level."""
-		return data.set_index("impression_id")["clicked"]
+		summary = data.groupby("variant")["clicked"].agg(["sum", "count"]).to_dict("index")
+		return {
+			v: {"successes": int(d["sum"]), "n": int(d["count"])}
+			for v, d in summary.items()
+		}
 
-	results = test.analyze(["click_through_rate"])
+	results = test.analyze(df, metrics=["click_through_rate"], run_srm_check=False)
 	result = results.metric_results["click_through_rate"]
 	assert "p_value" in result
 	assert 0 <= result["p_value"] <= 1
@@ -131,18 +130,18 @@ def test_proportion_handles_zero_baseline_gracefully():
 		"converted": [0, 0, 1, 0],
 	})
 
-	test = ABTest(
-		name="zero_baseline_proportion",
-		data=data,
-		variant_col="variant",
-		unit_id="user_id",
-	)
+	test = ABTest(name="zero_baseline_proportion", variants=["A", "B"])
 
 	@test.metric(metric_type="proportion")
 	def conversion_rate(df):
-		return df.groupby("user_id")["converted"].max()
+		per_user = df.groupby(["variant", "user_id"])["converted"].max().reset_index()
+		summary = per_user.groupby("variant")["converted"].agg(["sum", "count"]).to_dict("index")
+		return {
+			v: {"successes": int(d["sum"]), "n": int(d["count"])}
+			for v, d in summary.items()
+		}
 
-	results = test.analyze(["conversion_rate"])
+	results = test.analyze(data, metrics=["conversion_rate"], run_srm_check=False)
 	result = results.metric_results["conversion_rate"]
 	assert "p_value" in result
 	# AbexpBackend handles zero baseline gracefully by computing the actual p-value

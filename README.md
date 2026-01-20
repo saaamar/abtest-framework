@@ -98,9 +98,9 @@ This framework sits **on top of** the experimentation system and owns **math and
         ```
 
 * Implements the **statistical engine**
-    * Aggregates data by `unit_id` and `variant_label`
-    * Computes per-variant metrics
+    * Consumes per-variant sufficient statistics returned by your metric functions
     * Runs hypothesis tests, confidence intervals, power/sample size, etc.
+    * Stays schema-agnostic (the framework does not require a specific DataFrame shape)
 
 * Drives **Go/NoGo decisions**
     * Compares any pair of variants (e.g., `control` vs `shadow_variant_B` during shadow, `control` vs `variant_B` during A/B)
@@ -110,9 +110,9 @@ From the framework's point of view, **shadow variants are just additional varian
 
 ### Choosing the Unit of Randomization vs. Unit of Analysis (Framework View)
 
-When configuring this package you must choose a **`unit_id`** (for example `user_id`, `conversation_id`, or `session_id`). In practice:
+You still must choose a **unit of randomization / analysis** (for example `user_id`, `conversation_id`, or `session_id`). In practice:
 
-* Most product teams should start with **user‑level experiments** (`unit_id = user_id`) for user‑centric metrics.
+* Most product teams should start with **user‑level experiments** (unit = `user_id`) for user‑centric metrics.
 * Conversation‑ or session‑level units are appropriate only when the metric and experience are truly conversation/session‑centric and you are comfortable with mixed exposure across a user’s lifetime.
 
 The detailed trade‑offs (including the bot example, correlation, and cluster‑robust analysis) are covered in:
@@ -414,9 +414,7 @@ from ab_framework import ABTest
 
 test = ABTest(
     name="homepage_redesign",
-    data=df,
-    variant_col="variant",
-    unit_id="user_id",
+    variants=["A", "B"],
 )
 
 # Configure analysis knobs (including treatment allocation) after construction
@@ -425,7 +423,8 @@ test.setup(
 )
 
 # Run analysis with automatic SRM check
-results = test.analyze(run_srm_check=True)
+observed_counts = df.groupby("variant")["user_id"].nunique().to_dict()
+results = test.analyze(df, run_srm_check=True, observed_counts=observed_counts)
 
 # Check SRM result
 if not results.srm_result['passed']:

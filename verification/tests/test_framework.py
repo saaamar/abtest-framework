@@ -40,15 +40,16 @@ def test_scenario1_framework() -> Dict[str, Any]:
     df = _load_csv("scenario1_conversion.csv")
     print(f"\nData: {len(df)} impressions from {df['user_id'].nunique()} users")
 
-    # ABTest expects data with unit_id + variant; metrics return Series indexed by unit
-    test = ABTest(name="scenario1", data=df, variant_col="variant", unit_id="user_id")
+    test = ABTest(name="scenario1", variants=["A", "B"])
 
     @test.metric(metric_type="proportion")
-    def conversion_rate(data: pd.DataFrame) -> pd.Series:
+    def conversion_rate(data: pd.DataFrame) -> Dict[str, Dict[str, int]]:
         # 1 if user converted in any impression
-        return data.groupby("user_id")["converted"].max()
+        per_user = data.groupby(["variant", "user_id"])["converted"].max().reset_index()
+        summary = per_user.groupby("variant")["converted"].agg(["sum", "count"]).to_dict("index")
+        return {v: {"successes": int(d["sum"]), "n": int(d["count"])} for v, d in summary.items()}
 
-    results = test.analyze(metrics=["conversion_rate"])
+    results = test.analyze(df, metrics=["conversion_rate"], run_srm_check=False)
     res = list(results.metric_results.values())[0]
 
     elapsed = time.time() - start
@@ -82,14 +83,16 @@ def test_scenario2_framework() -> Dict[str, Any]:
     df = _load_csv("scenario2_revenue.csv")
     print(f"\nData: {len(df)} sessions from {df['user_id'].nunique()} active users")
 
-    test = ABTest(name="scenario2", data=df, variant_col="variant", unit_id="user_id")
+    test = ABTest(name="scenario2", variants=["A", "B"])
 
     @test.metric(metric_type="mean")
-    def revenue_per_user(data: pd.DataFrame) -> pd.Series:
+    def revenue_per_user(data: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
         # Sum session revenue per user (all users are active)
-        return data.groupby("user_id")["session_revenue"].sum()
+        per_user = data.groupby(["variant", "user_id"])["session_revenue"].sum().reset_index()
+        summary = per_user.groupby("variant")["session_revenue"].agg(["mean", "std", "count"]).to_dict("index")
+        return {v: {"mean": float(d["mean"]), "std": float(d["std"]), "n": int(d["count"])} for v, d in summary.items()}
 
-    results = test.analyze(metrics=["revenue_per_user"])
+    results = test.analyze(df, metrics=["revenue_per_user"], run_srm_check=False)
     res = list(results.metric_results.values())[0]
 
     elapsed = time.time() - start
@@ -123,29 +126,15 @@ def test_scenario3_framework() -> Dict[str, Any]:
     df = _load_csv("scenario3_ctr.csv")
     print(f"\nData: {len(df)} impressions from {df['user_id'].nunique()} users")
 
-    test = ABTest(name="scenario3", data=df, variant_col="variant", unit_id="user_id")
+    test = ABTest(name="scenario3", variants=["A", "B"])
 
     @test.metric(metric_type="proportion")
-    def ctr_impression(data: pd.DataFrame) -> pd.Series:
-        # Each impression is a trial; CTR per impression is just clicked (0/1)
-        # We aggregate to user-level mean CTR if we want user-centric; here we
-        # follow ground truth which uses impression-level z-test, so we treat
-        # each impression as a unit.
-        # To keep the same API, use impression_id as unit_id-like index.
-        return data.groupby("impression_id")["clicked"].max()
+    def ctr_impression(data: pd.DataFrame) -> Dict[str, Dict[str, int]]:
+        # Impression-level CTR: each row is a Bernoulli trial (clicked 0/1)
+        summary = data.groupby("variant")["clicked"].agg(["sum", "count"]).to_dict("index")
+        return {v: {"successes": int(d["sum"]), "n": int(d["count"])} for v, d in summary.items()}
 
-    # Temporarily override unit_id for this metric by creating a new ABTest
-    df_impr = df.copy()
-    df_impr["impression_id"] = np.arange(len(df_impr))
-    test_ctr = ABTest(
-        name="scenario3_impression",
-        data=df_impr,
-        variant_col="variant",
-        unit_id="impression_id",
-    )
-    test_ctr.metric(metric_type="proportion")(ctr_impression)
-
-    results = test_ctr.analyze(metrics=["ctr_impression"])
+    results = test.analyze(df, metrics=["ctr_impression"], run_srm_check=False)
     res = list(results.metric_results.values())[0]
 
     elapsed = time.time() - start
@@ -179,23 +168,29 @@ def test_scenario4_framework() -> Dict[str, Any]:
     df = _load_csv("scenario4_multi.csv")
     print(f"\nData: {len(df)} sessions from {df['user_id'].nunique()} users")
 
-    test = ABTest(name="scenario4", data=df, variant_col="variant", unit_id="user_id")
+    test = ABTest(name="scenario4", variants=["A", "B"])
 
     @test.metric(metric_type="proportion")
-    def converted_any(data: pd.DataFrame) -> pd.Series:
-        return data.groupby("user_id")["converted_this_session"].max()
+    def converted_any(data: pd.DataFrame) -> Dict[str, Dict[str, int]]:
+        per_user = data.groupby(["variant", "user_id"])["converted_this_session"].max().reset_index()
+        summary = per_user.groupby("variant")["converted_this_session"].agg(["sum", "count"]).to_dict("index")
+        return {v: {"successes": int(d["sum"]), "n": int(d["count"])} for v, d in summary.items()}
 
     @test.metric(metric_type="mean")
-    def total_order_value(data: pd.DataFrame) -> pd.Series:
-        return data.groupby("user_id")["order_value"].sum()
+    def total_order_value(data: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
+        per_user = data.groupby(["variant", "user_id"])["order_value"].sum().reset_index()
+        summary = per_user.groupby("variant")["order_value"].agg(["mean", "std", "count"]).to_dict("index")
+        return {v: {"mean": float(d["mean"]), "std": float(d["std"]), "n": int(d["count"])} for v, d in summary.items()}
 
     @test.metric(metric_type="mean")
-    def total_revenue(data: pd.DataFrame) -> pd.Series:
-        return data.groupby("user_id")["session_revenue"].sum()
+    def total_revenue(data: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
+        per_user = data.groupby(["variant", "user_id"])["session_revenue"].sum().reset_index()
+        summary = per_user.groupby("variant")["session_revenue"].agg(["mean", "std", "count"]).to_dict("index")
+        return {v: {"mean": float(d["mean"]), "std": float(d["std"]), "n": int(d["count"])} for v, d in summary.items()}
 
     metrics = ["converted_any", "total_order_value", "total_revenue"]
 
-    results = test.analyze(metrics=metrics, correction="bonferroni")
+    results = test.analyze(df, metrics=metrics, correction="bonferroni", run_srm_check=False)
 
     elapsed = time.time() - start
 
@@ -233,14 +228,14 @@ def _binary_scenario(name: str, csv: str, value_col: str) -> Dict[str, Any]:
     df = _load_csv(csv)
     print(f"\nData: {len(df)} sessions")
 
-    test = ABTest(name=name, data=df, variant_col="variant", unit_id="user_id")
+    test = ABTest(name=name, variants=["A", "B"])
 
     @test.metric(metric_type="proportion")
-    def binary_metric(data: pd.DataFrame) -> pd.Series:
-        # Aggregate per user as mean of the binary flag across sessions
-        return data.groupby("user_id")[value_col].mean()
+    def binary_metric(data: pd.DataFrame) -> Dict[str, Dict[str, int]]:
+        summary = data.groupby("variant")[value_col].agg(["sum", "count"]).to_dict("index")
+        return {v: {"successes": int(d["sum"]), "n": int(d["count"])} for v, d in summary.items()}
 
-    results = test.analyze(metrics=["binary_metric"])
+    results = test.analyze(df, metrics=["binary_metric"], run_srm_check=False)
     res = list(results.metric_results.values())[0]
 
     elapsed = time.time() - start
@@ -271,13 +266,15 @@ def _continuous_scenario(name: str, csv: str, value_col: str) -> Dict[str, Any]:
     df = _load_csv(csv)
     print(f"\nData: {len(df)} sessions")
 
-    test = ABTest(name=name, data=df, variant_col="variant", unit_id="user_id")
+    test = ABTest(name=name, variants=["A", "B"])
 
     @test.metric(metric_type="mean")
-    def metric_value(data: pd.DataFrame) -> pd.Series:
-        return data.groupby("user_id")[value_col].mean()
+    def metric_value(data: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
+        per_user = data.groupby(["variant", "user_id"])[value_col].mean().reset_index()
+        summary = per_user.groupby("variant")[value_col].agg(["mean", "std", "count"]).to_dict("index")
+        return {v: {"mean": float(d["mean"]), "std": float(d["std"]), "n": int(d["count"])} for v, d in summary.items()}
 
-    results = test.analyze(metrics=["metric_value"])
+    results = test.analyze(df, metrics=["metric_value"], run_srm_check=False)
     res = list(results.metric_results.values())[0]
 
     elapsed = time.time() - start

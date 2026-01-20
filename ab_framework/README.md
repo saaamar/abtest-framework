@@ -27,18 +27,36 @@ For most experiments, decisions should be driven by a single primary metric whil
 Example:
 
 ```python
-test = ABTest(name="checkout_redesign", data=df)
+test = ABTest(name="checkout_redesign", variants=["A", "B"])
+
+# SRM is explicit in stateless mode
+observed_counts = df.groupby("variant")["user_id"].nunique().to_dict()
 
 @test.metric(metric_type="proportion", is_primary=True, monitor_alpha=0.05, monitor_power=0.80)
 def conversion_rate(data):
-    return data.groupby('user_id')['purchased'].max()
+    user_level = data.groupby(["variant", "user_id"])["purchased"].max()
+    out = {}
+    for variant in ["A", "B"]:
+        v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+        out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+    return out
 
 @test.metric(metric_type="proportion", inferiority_margin=0.01, monitor_alpha=0.05, monitor_power=0.80)
 def resolved_rate(data):
     # Example guardrail-like monitor (descriptive only in soft mode)
-    return data.groupby('user_id')['resolved'].max()
+    user_level = data.groupby(["variant", "user_id"])["resolved"].max()
+    out = {}
+    for variant in ["A", "B"]:
+        v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+        out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+    return out
 
-results = test.analyze(run_srm_check=True, correction=None)
+results = test.analyze(
+    df,
+    run_srm_check=True,
+    observed_counts=observed_counts,
+    correction=None,
+)
 
 # Primary-driven decision helper
 print(results.decision_soft_monitoring())
@@ -72,25 +90,41 @@ df = pd.read_csv('experiment_data.csv')
 # Create test
 test = ABTest(
     name="homepage_redesign",
-    data=df,
-    variant_col="variant",  # Column with 'A', 'B', etc.
-    unit_id="user_id"       # Randomization unit
+    variants=["A", "B"],
 )
 
 # Register metrics using decorator
 @test.metric(metric_type="proportion")
 def conversion_rate(data):
     """User-level conversion rate."""
-    return data.groupby('user_id')['converted'].max()
+    user_level = data.groupby(["variant", "user_id"])["converted"].max()
+    out = {}
+    for variant in ["A", "B"]:
+        v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+        out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+    return out
 
 @test.metric(metric_type="mean")
 def revenue_per_user(data):
     """Total revenue per user."""
-    return data.groupby('user_id')['revenue'].sum()
+    user_level = data.groupby(["variant", "user_id"])["revenue"].sum()
+    out = {}
+    for variant in ["A", "B"]:
+        v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+        n = int(v.shape[0])
+        out[variant] = {
+            "mean": float(v.mean()) if n else 0.0,
+            "std": float(v.std(ddof=1)) if n > 1 else 0.0,
+            "n": n,
+        }
+    return out
 
 # Analyze with multi-metric correction
 results = test.analyze(
+    df,
     metrics=['conversion_rate', 'revenue_per_user'],
+    run_srm_check=True,
+    observed_counts=df.groupby("variant")["user_id"].nunique().to_dict(),
     correction='bonferroni'  # or 'fdr' or None
 )
 
@@ -102,25 +136,49 @@ print(results.summary())
 
 ### 1. Metric Functions
 
-Metric functions take the raw DataFrame and return a pandas Series indexed by the unit_id:
+Metric functions take the raw DataFrame and return **per-variant summary stats**.
+The core stays schema-agnostic; your metric function is allowed to be schema-aware.
 
 ```python
 @test.metric(metric_type="proportion")
 def conversion_rate(data):
-    # Return one value per user
-    return data.groupby('user_id')['converted'].max()
+    # User-level conversion → per-variant successes / n
+    user_level = data.groupby(["variant", "user_id"])["converted"].max()
+    return {
+        "A": {"successes": int(user_level.loc["A"].sum()), "n": int(user_level.loc["A"].shape[0])},
+        "B": {"successes": int(user_level.loc["B"].sum()), "n": int(user_level.loc["B"].shape[0])},
+    }
 
 @test.metric(metric_type="mean")
 def revenue_per_active_user(data):
     # Aggregation + filtering example
-    user_revenue = data.groupby('user_id')['revenue'].sum()
-    active = user_revenue[user_revenue > 0]
-    return active
+    user_revenue = data.groupby(["variant", "user_id"])["revenue"].sum()
+    out = {}
+    for variant in ["A", "B"]:
+        v = user_revenue.loc[variant]
+        v = v[v > 0]
+        n = int(v.shape[0])
+        out[variant] = {
+            "mean": float(v.mean()) if n else 0.0,
+            "std": float(v.std(ddof=1)) if n > 1 else 0.0,
+            "n": n,
+        }
+    return out
 
 @test.metric(metric_type="mean")
 def avg_session_duration(data):
     # Continuous metric
-    return data.groupby('user_id')['session_seconds'].mean()
+    user_level = data.groupby(["variant", "user_id"])["session_seconds"].mean()
+    out = {}
+    for variant in ["A", "B"]:
+        v = user_level.loc[variant]
+        n = int(v.shape[0])
+        out[variant] = {
+            "mean": float(v.mean()) if n else 0.0,
+            "std": float(v.std(ddof=1)) if n > 1 else 0.0,
+            "n": n,
+        }
+    return out
 ```
 
 ### 2. Metric Type Selection
@@ -192,46 +250,89 @@ When running experiments, you typically track several metrics with different pur
 ```python
 from ab_framework import ABTest
 
-test = ABTest(name="checkout_redesign", data=df)
+test = ABTest(name="checkout_redesign", variants=["A", "B"])
+observed_counts = df.groupby("variant")["user_id"].nunique().to_dict()
 
 # PRIMARY: What we're trying to improve
 @test.metric(metric_type="proportion")
 def conversion_rate(data):
     """PRIMARY - Main success metric"""
-    return data.groupby('user_id')['purchased'].max()
+    user_level = data.groupby(["variant", "user_id"])["purchased"].max()
+    out = {}
+    for variant in ["A", "B"]:
+        v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+        out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+    return out
 
 # GUARDRAILS: What we must not harm
 @test.metric(metric_type="mean")
 def revenue_per_order(data):
     """GUARDRAIL - Ensure we don't reduce order value"""
     orders = data[data['purchased'] == 1]
-    return orders.groupby('user_id')['order_value'].sum()
+    user_level = orders.groupby(["variant", "user_id"])["order_value"].sum() if not orders.empty else pd.Series(dtype=float)
+    out = {}
+    for variant in ["A", "B"]:
+        if isinstance(user_level, pd.Series) and not user_level.empty and variant in user_level.index.get_level_values(0):
+            v = user_level.loc[variant]
+        else:
+            v = pd.Series(dtype=float)
+        n = int(v.shape[0])
+        out[variant] = {"mean": float(v.mean()) if n else 0.0, "std": float(v.std(ddof=1)) if n > 1 else 0.0, "n": n}
+    return out
 
 @test.metric(metric_type="mean")
 def page_load_time(data):
     """GUARDRAIL - Ensure performance doesn't degrade"""
-    return data.groupby('user_id')['load_time'].mean()
+    user_level = data.groupby(["variant", "user_id"])["load_time"].mean()
+    out = {}
+    for variant in ["A", "B"]:
+        v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+        n = int(v.shape[0])
+        out[variant] = {"mean": float(v.mean()) if n else 0.0, "std": float(v.std(ddof=1)) if n > 1 else 0.0, "n": n}
+    return out
 
 @test.metric(metric_type="mean")
 def user_satisfaction(data):
     """GUARDRAIL - Protect user experience"""
-    return data.groupby('user_id')['satisfaction_score'].mean()
+    user_level = data.groupby(["variant", "user_id"])["satisfaction_score"].mean()
+    out = {}
+    for variant in ["A", "B"]:
+        v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+        n = int(v.shape[0])
+        out[variant] = {"mean": float(v.mean()) if n else 0.0, "std": float(v.std(ddof=1)) if n > 1 else 0.0, "n": n}
+    return out
 
 # DIAGNOSTICS: For understanding behavior
 @test.metric(metric_type="proportion")
 def cart_abandonment(data):
     """DIAGNOSTIC - Understand funnel behavior"""
-    added = data.groupby('user_id')['added_to_cart'].max()
-    purchased = data.groupby('user_id')['purchased'].max()
-    return ((added == 1) & (purchased == 0)).astype(int)
+    added = data.groupby(["variant", "user_id"])["added_to_cart"].max()
+    purchased = data.groupby(["variant", "user_id"])["purchased"].max()
+    out = {}
+    for variant in ["A", "B"]:
+        if variant in added.index.get_level_values(0) and variant in purchased.index.get_level_values(0):
+            v_added = added.loc[variant]
+            v_purchased = purchased.loc[variant]
+            abandoned = ((v_added == 1) & (v_purchased == 0)).astype(int)
+        else:
+            abandoned = pd.Series(dtype=int)
+        out[variant] = {"successes": int(abandoned.sum()) if not abandoned.empty else 0, "n": int(abandoned.shape[0])}
+    return out
 
 @test.metric(metric_type="mean")
 def checkout_page_views(data):
     """DIAGNOSTIC - Track engagement"""
-    return data.groupby('user_id')['checkout_views'].sum()
+    user_level = data.groupby(["variant", "user_id"])["checkout_views"].sum()
+    out = {}
+    for variant in ["A", "B"]:
+        v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+        n = int(v.shape[0])
+        out[variant] = {"mean": float(v.mean()) if n else 0.0, "std": float(v.std(ddof=1)) if n > 1 else 0.0, "n": n}
+    return out
 
 # Analyze all metrics with correction
 results = test.analyze(
+    df,
     metrics=[
         'conversion_rate',      # Primary
         'revenue_per_order',    # Guardrail
@@ -240,6 +341,8 @@ results = test.analyze(
         'cart_abandonment',     # Diagnostic
         'checkout_page_views'   # Diagnostic
     ],
+    run_srm_check=True,
+    observed_counts=observed_counts,
     correction='bonferroni'  # Apply correction for multiple testing
 )
 
@@ -403,17 +506,16 @@ Since p < 0.001 → SRM DETECTED ⚠️
 from ab_framework import ABTest
 
 # Flexible traffic allocation
-test = ABTest(
-    name="homepage_redesign",
-    data=df,
-    variant_col="variant",
-    unit_id="user_id",
-    treatment_fraction=0.3  # Treatment allocation: 30% treatment / 70% control
-)
+test = ABTest(name="homepage_redesign", variants=["A", "B"])
+
+# Configure expected allocation for SRM expectations
+test.setup(treatment_fraction=0.3)  # 30% treatment / 70% control
 
 # SRM check runs automatically by default
 results = test.analyze(
+    df,
     metrics=['conversion_rate'],
+    observed_counts=df.groupby("variant")["user_id"].nunique().to_dict(),
     run_srm_check=True  # Default
 )
 
@@ -438,19 +540,19 @@ print(f"Deviations: {results.srm_result['deviations_pct']}")
 
 ```python
 # 50/50 split (default)
-test1 = ABTest(name="test1", data=df)
+test1 = ABTest(name="test1", variants=["A", "B"])
 test1.setup(treatment_fraction=0.5)
 
 # 70/30 split (70% control, 30% treatment)
-test2 = ABTest(name="test2", data=df)
+test2 = ABTest(name="test2", variants=["A", "B"])
 test2.setup(treatment_fraction=0.3)
 
 # 90/10 split for high-risk changes
-test3 = ABTest(name="test3", data=df)
+test3 = ABTest(name="test3", variants=["A", "B"])
 test3.setup(treatment_fraction=0.1)
 
 # Equal split (when treatment_fraction is left as None)
-test4 = ABTest(name="test4", data=df)  # Assumes 50/50 in SRM expectations
+test4 = ABTest(name="test4", variants=["A", "B"])  # Assumes 50/50 in SRM expectations
 ```
 
 **When SRM is Detected:**
@@ -480,16 +582,25 @@ aa_data = load_experiment_data(start_date='2024-01-01', days=7)
 
 aa_test = ABTest(
     name="infrastructure_validation",
-    data=aa_data,
-    variant_col="variant",
-    unit_id="user_id"
+    variants=["A", "B"],
 )
 
 @aa_test.metric(metric_type="mean")
 def key_metric(data):
-    return data.groupby('user_id')['metric_value'].mean()
+    user_level = data.groupby(["variant", "user_id"])["metric_value"].mean()
+    out = {}
+    for variant in ["A", "B"]:
+        v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+        n = int(v.shape[0])
+        out[variant] = {"mean": float(v.mean()) if n else 0.0, "std": float(v.std(ddof=1)) if n > 1 else 0.0, "n": n}
+    return out
 
-aa_results = aa_test.analyze(['key_metric'])
+aa_results = aa_test.analyze(
+    aa_data,
+    metrics=["key_metric"],
+    run_srm_check=True,
+    observed_counts=aa_data.groupby("variant")["user_id"].nunique().to_dict(),
+)
 
 # Check A/A test results
 if aa_results.metric_results['key_metric']['significant']:
@@ -570,8 +681,8 @@ for day in experiment_days:
 
 for day in range(1, max_day + 1):
     cumulative_data = df[df['day'] <= day]
-    test = ABTest(name=f"day_{day}", data=cumulative_data)
-    results = test.analyze(['conversion_rate'])
+    test = ABTest(name=f"day_{day}", variants=["A", "B"])
+    results = test.analyze(cumulative_data, metrics=["conversion_rate"], run_srm_check=False)
     
     p_value = results.metric_results['conversion_rate']['p_value']
     # Plot with horizontal line at alpha (e.g., 0.05)
@@ -854,7 +965,13 @@ If you can't use `@test.metric(...)` as a decorator, you can still register metr
 
 ```python
 def my_metric(data):
-    return data.groupby('user_id')['value'].sum()
+    user_level = data.groupby(["variant", "user_id"])["value"].sum()
+    out = {}
+    for variant in ["A", "B"]:
+        v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+        n = int(v.shape[0])
+        out[variant] = {"mean": float(v.mean()) if n else 0.0, "std": float(v.std(ddof=1)) if n > 1 else 0.0, "n": n}
+    return out
 
 test.metric(metric_type="mean")(my_metric)
 ```
@@ -864,25 +981,46 @@ test.metric(metric_type="mean")(my_metric)
 ### Example 1: E-commerce Checkout Flow
 
 ```python
-test = ABTest(name="checkout_v2", data=df)
+test = ABTest(name="checkout_v2", variants=["A", "B"])
+observed_counts = df.groupby("variant")["user_id"].nunique().to_dict()
 
 @test.metric(metric_type="proportion")
 def conversion_rate(data):
-    return data.groupby('user_id')['purchased'].max()
+    user_level = data.groupby(["variant", "user_id"])["purchased"].max()
+    out = {}
+    for variant in ["A", "B"]:
+        v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+        out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+    return out
 
 @test.metric(metric_type="mean")
 def revenue_per_user(data):
-    return data.groupby('user_id')['order_value'].sum()
+    user_level = data.groupby(["variant", "user_id"])["order_value"].sum()
+    out = {}
+    for variant in ["A", "B"]:
+        v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+        n = int(v.shape[0])
+        out[variant] = {"mean": float(v.mean()) if n else 0.0, "std": float(v.std(ddof=1)) if n > 1 else 0.0, "n": n}
+    return out
 
 @test.metric(metric_type="proportion")
 def cart_abandonment_rate(data):
-    added_to_cart = data.groupby('user_id')['added_to_cart'].max()
-    purchased = data.groupby('user_id')['purchased'].max()
-    abandoned = (added_to_cart == 1) & (purchased == 0)
-    return abandoned.astype(int)
+    added = data.groupby(["variant", "user_id"])["added_to_cart"].max()
+    purchased = data.groupby(["variant", "user_id"])["purchased"].max()
+    out = {}
+    for variant in ["A", "B"]:
+        if variant in added.index.get_level_values(0) and variant in purchased.index.get_level_values(0):
+            abandoned = ((added.loc[variant] == 1) & (purchased.loc[variant] == 0)).astype(int)
+        else:
+            abandoned = pd.Series(dtype=int)
+        out[variant] = {"successes": int(abandoned.sum()) if not abandoned.empty else 0, "n": int(abandoned.shape[0])}
+    return out
 
 results = test.analyze(
+    df,
     metrics=['conversion_rate', 'revenue_per_user', 'cart_abandonment_rate'],
+    run_srm_check=True,
+    observed_counts=observed_counts,
     correction='bonferroni'
 )
 ```
@@ -890,25 +1028,49 @@ results = test.analyze(
 ### Example 2: Content Engagement
 
 ```python
-test = ABTest(name="video_layout", data=df)
+test = ABTest(name="video_layout", variants=["A", "B"])
+observed_counts = df.groupby("variant")["user_id"].nunique().to_dict()
 
 @test.metric(metric_type="proportion")
 def watch_rate(data):
     """% of users who watched video."""
-    return data.groupby('user_id')['video_started'].max()
+    user_level = data.groupby(["variant", "user_id"])["video_started"].max()
+    out = {}
+    for variant in ["A", "B"]:
+        v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+        out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+    return out
 
 @test.metric(metric_type="mean")
 def completion_rate(data):
     """% completion among watchers."""
     watchers = data[data['video_started'] == 1]
-    return watchers.groupby('user_id')['completion_pct'].mean()
+    user_level = watchers.groupby(["variant", "user_id"])["completion_pct"].mean() if not watchers.empty else pd.Series(dtype=float)
+    out = {}
+    for variant in ["A", "B"]:
+        if isinstance(user_level, pd.Series) and not user_level.empty and variant in user_level.index.get_level_values(0):
+            v = user_level.loc[variant]
+        else:
+            v = pd.Series(dtype=float)
+        n = int(v.shape[0])
+        out[variant] = {"mean": float(v.mean()) if n else 0.0, "std": float(v.std(ddof=1)) if n > 1 else 0.0, "n": n}
+    return out
 
 @test.metric(metric_type="mean")
 def avg_watch_time(data):
-    return data.groupby('user_id')['watch_seconds'].sum()
+    user_level = data.groupby(["variant", "user_id"])["watch_seconds"].sum()
+    out = {}
+    for variant in ["A", "B"]:
+        v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+        n = int(v.shape[0])
+        out[variant] = {"mean": float(v.mean()) if n else 0.0, "std": float(v.std(ddof=1)) if n > 1 else 0.0, "n": n}
+    return out
 
 results = test.analyze(
+    df,
     metrics=['watch_rate', 'completion_rate', 'avg_watch_time'],
+    run_srm_check=True,
+    observed_counts=observed_counts,
     correction='fdr'
 )
 ```
@@ -919,15 +1081,19 @@ results = test.analyze(
 # For impression/click data, use impression_id as unit
 test = ABTest(
     name="ad_creative",
-    data=df,
-    unit_id="impression_id"  # Not user_id!
+    variants=["A", "B"],
 )
 
 @test.metric(metric_type="proportion")
 def click_through_rate(data):
-    return data.set_index('impression_id')['clicked']
+    out = {}
+    for variant in ["A", "B"]:
+        v = data.loc[data["variant"] == variant, "clicked"]
+        out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+    return out
 
-results = test.analyze(['click_through_rate'])
+observed_counts = df.groupby("variant")["impression_id"].nunique().to_dict()
+results = test.analyze(df, metrics=["click_through_rate"], run_srm_check=True, observed_counts=observed_counts)
 ```
 
 ## Architecture
@@ -963,12 +1129,12 @@ class MyBackend(StatisticalBackend):
             # ... other fields
         }
     
-    def mean_t_test(self, values_a, values_b, alpha):
+    def mean_t_test(self, mean_a, std_a, n_a, mean_b, std_b, n_b, alpha):
         # Your implementation
         return {...}
 
 # Use it
-test = ABTest(name="test", data=df, backend=MyBackend())
+test = ABTest(name="test", variants=["A", "B"], backend=MyBackend())
 ```
 
 ## Testing

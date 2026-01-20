@@ -89,16 +89,26 @@ def main() -> None:
 
         test_aa = ABTest(
             name="agent_sessions_quality_AA",
-            data=df_aa,
-            variant_col="variant",
-            unit_id="user_id",
+            variants=["A", "B"],
         )
+
+        observed_counts_aa = df_aa.groupby("variant")["user_id"].nunique().to_dict()
 
         @test_aa.metric(metric_type="proportion", is_primary=True)
         def quality_rate(data):
-            return data.groupby("user_id")["quality"].max()
+            user_level = data.groupby(["variant", "user_id"])["quality"].max()
+            out = {}
+            for variant in ["A", "B"]:
+                v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+                out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+            return out
 
-        aa_results = test_aa.analyze(run_srm_check=True, correction=None)
+        aa_results = test_aa.analyze(
+            df_aa,
+            run_srm_check=True,
+            observed_counts=observed_counts_aa,
+            correction=None,
+        )
         print(aa_results.summary())
         print("\nSOFT MONITORING DECISION:")
         print(aa_results.decision_soft_monitoring())
@@ -197,16 +207,26 @@ def main() -> None:
 
         test = ABTest(
             name=f"agent_quality_rate_until_{day.isoformat()}",
-            data=current,
-            variant_col="variant",
-            unit_id="user_id",
+            variants=["A", "B"],
         )
+
+        observed_counts = current.groupby("variant")["user_id"].nunique().to_dict()
 
         @test.metric(metric_type="proportion", is_primary=True)
         def quality_rate(data):
-            return data.groupby("user_id")["quality"].max()
+            user_level = data.groupby(["variant", "user_id"])["quality"].max()
+            out = {}
+            for variant in ["A", "B"]:
+                v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+                out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+            return out
 
-        results = test.analyze(run_srm_check=True, correction=None)
+        results = test.analyze(
+            current,
+            run_srm_check=True,
+            observed_counts=observed_counts,
+            correction=None,
+        )
 
         # Calculate experiment progress
         days_elapsed = (day - experiment_start).days + 1

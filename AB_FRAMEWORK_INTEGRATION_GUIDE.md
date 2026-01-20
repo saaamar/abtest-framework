@@ -49,6 +49,8 @@ This guide explains how to integrate with the AB Testing Framework for UI develo
 
 The AB Testing Framework provides statistical analysis and sample size planning for A/B experiments. You provide the data and parameters, the framework handles the statistical computations and returns results.
 
+**Important design note:** the framework core is **schema-agnostic**. It does not inspect your DataFrame schema (or any other data object). You pass a data snapshot into `analyze(data=...)`, and your metric functions are responsible for converting that snapshot into per-variant summary statistics.
+
 ## Core Integration Pattern
 
 ### 1. Import the Framework
@@ -57,10 +59,12 @@ from ab_framework import ABTest
 ```
 
 ### 2. Prepare Your Data
-Your data must be a pandas DataFrame with these required columns:
-- **Variant column** (e.g., `variant`): Contains variant assignments ("A", "B", "control", "treatment", etc.)
-- **Unit ID column** (e.g., `user_id`): Unique identifier for each randomization unit
-- **Additional data columns**: Whatever data your metrics need
+Your data can be any object (commonly a pandas DataFrame). The framework core will not inspect it.
+
+Your metric functions decide:
+- how to interpret variants (e.g. `"control"` vs `"treatment"`)
+- what the unit of analysis is (user / conversation / impression)
+- how to aggregate raw rows into the summary stats required for testing
 
 #### Example Data Structure:
 ```python
@@ -80,16 +84,27 @@ df = pd.DataFrame({
 ```python
 test = ABTest(
     name="ai_agent_quality_improvement",
-    data=df,
-    variant_col="variant",               # Column containing agent assignments
-    unit_id="conversation_id",           # Column with unique conversation identifiers
-    variants=["control", "treatment"],   # Optional: specify exact variants to test
+    variants=["control", "treatment"],   # Variants to compare
 )
 
 # Configure analysis knobs after construction
 test.setup(
     alpha=0.05,                 # Significance level (default is 0.05 if omitted)
     treatment_fraction=0.3,     # Treatment allocation: 30% treatment / 70% control (for SRM expectations)
+)
+
+# Run analysis on a specific snapshot (e.g., "today")
+observed_counts = {
+    "control": int((df["variant"] == "control").sum()),
+    "treatment": int((df["variant"] == "treatment").sum()),
+}
+
+results = test.analyze(
+    data=df,
+    metrics=["quality_rate", "resolved_rate"],
+    correction=None,
+    run_srm_check=True,
+    observed_counts=observed_counts,
 )
 ```
 
@@ -99,11 +114,8 @@ test.setup(
 | Parameter | Type | Mandatory | Description | Example/Default |
 |-----------|------|-----------|-------------|-------|
 | `name` | string | ✅ | Experiment identifier | "ai_agent_quality_improvement" |
-| `data` | DataFrame | ✅ | Your experiment data | See data structure above |
-| `variant_col` | string | ✅ | Column name with variant assignments | "variant" |
-| `unit_id` | string | ✅ | Column name with user/unit IDs | "conversation_id" |
 | `alpha` | float | ❌ | Significance level (2-tailed test); configured via `setup(alpha=...)` | Default: 0.05 |
-| `variants` | list | ❌ | Specific variants to analyze | Default: First 2 variants found |
+| `variants` | list | ❌ | Specific variants to analyze | Default: `["A", "B"]` |
 | `treatment_fraction` | float | ❌ | Treatment allocation: fraction of experiment traffic allocated to the treatment variant (e.g., 0.3 = 30% treatment / 70% control). Configure via `setup(treatment_fraction=...)`. Used for SRM expectations in SRM checks. | Default: None (assumes equal allocation across variants) |
 
 ### Metric Definition:
@@ -113,17 +125,27 @@ You must define metrics using the `metric(...)` decorator API:
 # Option 1: Decorator (recommended)
 @test.metric(metric_type="proportion", is_primary=True)
 def quality_rate(data):
-    """Calculate AI answer quality rate per conversation"""
-    return data.groupby('conversation_id')['quality'].max()  # 1 if conversation had quality answer
+    """Calculate AI answer quality rate per variant.
+
+    Return per-variant summary stats required for a proportion test:
+    {variant: {"successes": int, "n": int}}
+    """
+    per_conv = data.groupby(['variant', 'conversation_id'])['quality'].max().reset_index()
+    summary = per_conv.groupby('variant')['quality'].agg(['sum', 'count']).to_dict('index')
+    return {v: {'successes': int(d['sum']), 'n': int(d['count'])} for v, d in summary.items()}
 
 @test.metric(metric_type="proportion")
 def resolved_rate(data):
-    """Calculate session resolution rate per conversation"""
-    return data.groupby('conversation_id')['resolved'].max()  # 1 if conversation was resolved
+    """Calculate resolved rate per variant."""
+    per_conv = data.groupby(['variant', 'conversation_id'])['resolved'].max().reset_index()
+    summary = per_conv.groupby('variant')['resolved'].agg(['sum', 'count']).to_dict('index')
+    return {v: {'successes': int(d['sum']), 'n': int(d['count'])} for v, d in summary.items()}
 
 # Option 2: Programmatic (without using @ syntax)
 def quality_rate(data):
-    return data.groupby('conversation_id')['quality'].max()
+    per_conv = data.groupby(['variant', 'conversation_id'])['quality'].max().reset_index()
+    summary = per_conv.groupby('variant')['quality'].agg(['sum', 'count']).to_dict('index')
+    return {v: {'successes': int(d['sum']), 'n': int(d['count'])} for v, d in summary.items()}
 
 test.metric(metric_type="proportion", is_primary=True)(quality_rate)
 ```
@@ -162,14 +184,25 @@ The framework is designed around **one primary metric** for decision-making, wit
 ```python
 @test.metric(metric_type="proportion", is_primary=True)
 def quality_rate(data):  # PRIMARY - for decision making
-    return data.groupby('conversation_id')['quality'].max()
+    conv_level = data.groupby(["variant", "conversation_id"])["quality"].max()
+    out = {}
+    for variant in ["A", "B"]:
+        v = conv_level.loc[variant] if variant in conv_level.index.get_level_values(0) else pd.Series(dtype=float)
+        out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+    return out
 
 @test.metric(metric_type="proportion")  
 def resolved_rate(data):  # MONITORING - just observe, don't decide
-    return data.groupby('conversation_id')['resolved'].max()
+    conv_level = data.groupby(["variant", "conversation_id"])["resolved"].max()
+    out = {}
+    for variant in ["A", "B"]:
+        v = conv_level.loc[variant] if variant in conv_level.index.get_level_values(0) else pd.Series(dtype=float)
+        out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+    return out
 
 # No correction needed - only primary metric drives decisions
-results = test.analyze(correction=None)
+observed_counts = data.groupby("variant")["conversation_id"].nunique().to_dict()
+results = test.analyze(data, correction=None, run_srm_check=True, observed_counts=observed_counts)
 ```
 
 **When to use correction:**
@@ -183,9 +216,11 @@ The `analyze()` method returns an `ExperimentResults` object:
 
 ```python
 results = test.analyze(
+    data,
     metrics=["quality_rate", "resolved_rate"],
     correction=None,    # Recommended: primary + monitoring design
-    run_srm_check=True
+    run_srm_check=True,
+    observed_counts=observed_counts,
 )
 ```
 
@@ -296,9 +331,9 @@ sample_size = backend.sample_size_proportion(
 
 ### Required Data Structure:
 1. **DataFrame format**: Must be pandas DataFrame
-2. **Required columns**: variant_col and unit_id must exist
-3. **Minimum variants**: At least 2 different variant values
-4. **Unit-level aggregation**: Metrics should aggregate to unit_id level
+2. **Metric-defined columns**: The framework core does not validate schema; your metric functions define what columns they require.
+3. **Variants**: The ABTest is configured with explicit variant labels (e.g., `["A", "B"]`).
+4. **Unit-level aggregation**: Metrics should aggregate to the experiment's randomization unit (user, conversation, impression, etc.) and return per-variant summary stats.
 
 ### Common Data Patterns:
 
@@ -314,7 +349,12 @@ df = pd.DataFrame({
 
 @test.metric(metric_type="proportion")
 def quality_rate(data):
-    return data.groupby('conversation_id')['quality'].max()  # Ever had quality = 1
+    conv_level = data.groupby(["variant", "conversation_id"])["quality"].max()  # Ever had quality = 1
+    out = {}
+    for variant in ["control", "treatment"]:
+        v = conv_level.loc[variant] if variant in conv_level.index.get_level_values(0) else pd.Series(dtype=float)
+        out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+    return out
 ```
 
 #### Pre-Aggregated Data:
@@ -329,7 +369,13 @@ df = pd.DataFrame({
 
 @test.metric(metric_type="mean")
 def avg_session_duration(data):
-    return data.set_index('conversation_id')['session_duration']  # Already per-conversation
+    conv_level = data.groupby(["variant", "conversation_id"])["session_duration"].mean()  # Already per-conversation
+    out = {}
+    for variant in ["control", "treatment"]:
+        v = conv_level.loc[variant] if variant in conv_level.index.get_level_values(0) else pd.Series(dtype=float)
+        n = int(v.shape[0])
+        out[variant] = {"mean": float(v.mean()) if n else 0.0, "std": float(v.std(ddof=1)) if n > 1 else 0.0, "n": n}
+    return out
 ```
 
 ## Error Handling

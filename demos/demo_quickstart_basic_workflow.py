@@ -58,9 +58,7 @@ def main():
     
     test = ABTest(
         name="homepage_redesign",
-        data=df,
-        variant_col="variant",
-        unit_id="user_id"
+        variants=["A", "B"],
     )
     print(f"Test created: {test.name}")
     print(f"Variants found: {sorted(df['variant'].unique())}")
@@ -74,7 +72,12 @@ def main():
     @test.metric(metric_type="proportion", is_primary=True, monitor_alpha=0.05, monitor_power=0.80)
     def conversion_rate(data):
         """User-level conversion rate (% of users who converted)."""
-        return data.groupby('user_id')['converted'].max()
+        user_level = data.groupby(["variant", "user_id"])["converted"].max()
+        out = {}
+        for variant in ["A", "B"]:
+            v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+            out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+        return out
     
     print("Registered metric: conversion_rate")
     print("  Description: % of users who converted")
@@ -84,9 +87,12 @@ def main():
     # =========================================================================
     print("\n### STEP 5: Analyze Experiment ###\n")
     
+    observed_counts = df.groupby("variant")["user_id"].nunique().to_dict()
     results = test.analyze(
+        df,
         run_srm_check=True,
-        correction=None
+        observed_counts=observed_counts,
+        correction=None,
     )
     
     # =========================================================================
@@ -131,29 +137,57 @@ def main():
     
     test_multi = ABTest(
         name="checkout_optimization",
-        data=df_multi,
-        variant_col="variant",
-        unit_id="user_id"
+        variants=["A", "B"],
     )
     
     @test_multi.metric(metric_type="proportion")
     def conversion_rate(data):
-        return data.groupby('user_id')['converted_this_session'].max()
+        user_level = data.groupby(["variant", "user_id"])["converted_this_session"].max()
+        out = {}
+        for variant in ["A", "B"]:
+            v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+            out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+        return out
     
     @test_multi.metric(metric_type="mean")
     def revenue_per_user(data):
-        return data.groupby('user_id')['order_value'].sum()
+        user_level = data.groupby(["variant", "user_id"])["order_value"].sum()
+        out = {}
+        for variant in ["A", "B"]:
+            v = user_level.loc[variant] if variant in user_level.index.get_level_values(0) else pd.Series(dtype=float)
+            n = int(v.shape[0])
+            out[variant] = {
+                "mean": float(v.mean()) if n else 0.0,
+                "std": float(v.std(ddof=1)) if n > 1 else 0.0,
+                "n": n,
+            }
+        return out
     
     @test_multi.metric(metric_type="mean")
     def avg_order_value(data):
-        converters = data[data['converted_this_session'] == 1]
-        if len(converters) == 0:
-            return pd.Series(dtype=float)
-        return converters.groupby('user_id')['order_value'].mean()
+        converters = data[data["converted_this_session"] == 1]
+        user_level = converters.groupby(["variant", "user_id"])["order_value"].mean() if not converters.empty else pd.Series(dtype=float)
+        out = {}
+        for variant in ["A", "B"]:
+            if isinstance(user_level, pd.Series) and not user_level.empty and variant in user_level.index.get_level_values(0):
+                v = user_level.loc[variant]
+            else:
+                v = pd.Series(dtype=float)
+            n = int(v.shape[0])
+            out[variant] = {
+                "mean": float(v.mean()) if n else 0.0,
+                "std": float(v.std(ddof=1)) if n > 1 else 0.0,
+                "n": n,
+            }
+        return out
     
+    observed_counts_multi = df_multi.groupby("variant")["user_id"].nunique().to_dict()
     results_multi = test_multi.analyze(
-        metrics=['conversion_rate', 'revenue_per_user', 'avg_order_value'],
-        correction='bonferroni'  # Adjust for multiple testing
+        df_multi,
+        metrics=["conversion_rate", "revenue_per_user", "avg_order_value"],
+        run_srm_check=True,
+        observed_counts=observed_counts_multi,
+        correction="bonferroni",  # Adjust for multiple testing
     )
     
     print(results_multi.summary())

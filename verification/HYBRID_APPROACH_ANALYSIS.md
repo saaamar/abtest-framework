@@ -884,11 +884,11 @@ test = ABTest(
     backend=OwlBackend()  # Pluggable!
 )
 
-@test.metric
+@test.metric(metric_type="proportion")
 def conversion_rate(data):
     return data.groupby('user_id')['converted'].max()
 
-@test.metric
+@test.metric(metric_type="mean")
 def revenue_per_user(data):
     return data.groupby('user_id')['revenue'].sum()
 
@@ -994,7 +994,7 @@ Savings: -80 to -100 LOC (statistical layer replaced by thinner adapter)
 # Start with owl as primary backend
 from ab_framework.backends import OwlBackend
 
-test = ABTest(data=df, backend=OwlBackend())
+test = ABTest(name="my_experiment", data=df, backend=OwlBackend())
 ```
 
 **If owl fails or becomes unmaintained:**
@@ -1005,7 +1005,7 @@ test = ABTest(data=df, backend=OwlBackend())
 # One-line change to switch backend
 from ab_framework.backends import ScipyBackend
 
-test = ABTest(data=df, backend=ScipyBackend())
+test = ABTest(name="my_experiment", data=df, backend=ScipyBackend())
 ```
 
 **User code unchanged!** This is the power of the adapter pattern.

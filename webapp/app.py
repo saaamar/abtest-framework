@@ -5,6 +5,7 @@ from datetime import datetime, date
 import math
 import pandas as pd
 from ab_framework.core import ABTest
+from ab_framework import ScipyBackend
 from .agent_data_service import get_recent_baseline_and_volume, get_recent_user_variant_df
 import traceback
 
@@ -115,34 +116,17 @@ def create_app():
             else:
                 daily_per_variant = aa_daily_per_variant
 
-            # Use ABTest backend like the demo for sample size planning
-            # Initialize with recent 7-day mapping (unit = conversation_id)
-            df_conv = get_recent_user_variant_df(days=7)
-            if df_conv.empty:
-                # Fallback minimal data to avoid crash; planning still uses baseline_rate
-                df_conv = pd.DataFrame({
-                    "conversation_id": ["fallback-a", "fallback-b"],
-                    "variant": ["A", "B"],
-                })
-            ab = ABTest(
-                name="planning_demo",
-                data=df_conv,
-                variant_col="variant",
-                unit_id="conversation_id",
-                alpha=alpha,
-            )
-
-            # Convert allocation_ratio (% to treatment) to ratio (treatment:control)
-            # allocation_ratio=0.3 means 30% treatment, 70% control
-            # ratio = treatment/control = 0.3/0.7 = 0.43
-            ratio = allocation_ratio / (1 - allocation_ratio) if allocation_ratio < 1.0 else 1.0
-
-            ssz = ab.backend.sample_size_proportion(
+            # Use the statistical backend directly for sample size planning.
+            # This keeps planning independent of any specific ABTest instance
+            # so you can try multiple (alpha, power, mde, treatment_fraction)
+            # combinations without mutating experiment state.
+            backend = ScipyBackend()
+            ssz = backend.sample_size_proportion(
                 baseline_rate=baseline_rate,
                 mde=mde_relative,
                 alpha=alpha,
                 power=power,
-                ratio=ratio,
+                treatment_fraction=allocation_ratio,
             )
 
             # backend returns total_size / control_size; mirror demo semantics
@@ -375,10 +359,13 @@ def create_app():
                         data=df,
                         variant_col="variant",
                         unit_id="user_id",
-                        alpha=exp["alpha"],
-                        # allocation_ratio removed - data uses deterministic 50:50 hashing
-                        timestamp=today_str,
                     )
+                    # Configure analysis parameters after construction so that
+                    # ABTest.__init__ only carries metadata + data. Attach
+                    # analysis alpha and timestamp via setup().
+                    # allocation ratio / treatment_fraction is fixed 50:50
+                    # by the hashing scheme used in data generation.
+                    test.setup(alpha=exp["alpha"], timestamp=today_str)
 
                     # Define metrics like in demo: quality_rate (primary), resolved_rate (monitor)
                     @test.metric(
@@ -525,9 +512,8 @@ def create_app():
                             data=df_hist,
                             variant_col="variant",
                             unit_id="user_id",
-                            alpha=exp["alpha"],
-                            timestamp=hist_day.isoformat(),
                         )
+                        test_hist.setup(alpha=exp["alpha"], timestamp=hist_day.isoformat())
                         
                         @test_hist.metric(metric_type="proportion", is_primary=True)
                         def quality_ratio(data):

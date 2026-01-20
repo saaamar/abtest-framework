@@ -25,7 +25,7 @@ def estimate_experiment_duration(
     Args:
         required_sample_size: Total sample size needed (control + treatment)
         avg_daily_traffic: Average daily sessions/conversations
-        allocation_ratio: Fraction allocated to treatment (default 0.5 for 50/50)
+        allocation_ratio: Treatment allocation (fraction of traffic sent to treatment, default 0.5 for 50/50)
     
     Returns:
         Dictionary with duration estimates

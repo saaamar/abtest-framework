@@ -14,7 +14,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from ab_framework import ABTest, QualityChecker
+from ab_framework import ABTest, QualityChecker, ScipyBackend
 
 def main():
     print("=" * 70)
@@ -26,10 +26,8 @@ def main():
     # =========================================================================
     print("\n### STEP 1: Sample Size Calculation ###\n")
     
-    sample_size = ABTest(
-        name="planning_only",
-        data=pd.DataFrame({"user_id": [1, 2], "variant": ["A", "B"]}),
-    ).backend.sample_size_proportion(
+    backend = ScipyBackend()
+    sample_size = backend.sample_size_proportion(
         baseline_rate=0.10,  # Current 10% conversion rate
         mde=0.05,            # Want to detect 5% relative improvement
         power=0.80,          # 80% power

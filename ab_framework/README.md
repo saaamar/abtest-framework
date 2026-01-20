@@ -8,7 +8,7 @@ A production-ready A/B testing **orchestration and standardization layer** with 
 ## Features
 
 ✅ **Decorator-based metric registration** - Define metrics as simple Python functions  
-✅ **Automatic metric type detection** - Binary (conversion) vs continuous (revenue) metrics  
+✅ **Explicit metric types** - Declare binary vs continuous per metric  
 ✅ **Multi-metric orchestration** - Bonferroni and FDR correction for multiple testing  
 ✅ **SRM (Sample Ratio Mismatch) detection** - Automatic data quality checks  
 ✅ **Sample size calculation** - Pre-experiment power analysis via backend helper methods  
@@ -78,12 +78,12 @@ test = ABTest(
 )
 
 # Register metrics using decorator
-@test.metric
+@test.metric(metric_type="proportion")
 def conversion_rate(data):
     """User-level conversion rate."""
     return data.groupby('user_id')['converted'].max()
 
-@test.metric
+@test.metric(metric_type="mean")
 def revenue_per_user(data):
     """Total revenue per user."""
     return data.groupby('user_id')['revenue'].sum()
@@ -105,29 +105,29 @@ print(results.summary())
 Metric functions take the raw DataFrame and return a pandas Series indexed by the unit_id:
 
 ```python
-@test.metric
+@test.metric(metric_type="proportion")
 def conversion_rate(data):
     # Return one value per user
     return data.groupby('user_id')['converted'].max()
 
-@test.metric
+@test.metric(metric_type="mean")
 def revenue_per_active_user(data):
     # Aggregation + filtering example
     user_revenue = data.groupby('user_id')['revenue'].sum()
     active = user_revenue[user_revenue > 0]
     return active
 
-@test.metric
+@test.metric(metric_type="mean")
 def avg_session_duration(data):
     # Continuous metric
     return data.groupby('user_id')['session_seconds'].mean()
 ```
 
-### 2. Automatic Type Detection
+### 2. Metric Type Selection
 
-The framework automatically detects:
-- **Binary metrics** (0/1 values) → Uses proportion test
-- **Continuous metrics** → Uses t-test for means
+You must declare the metric type at registration time:
+- **Binary metrics** → `metric_type="proportion"`
+- **Continuous metrics** → `metric_type="mean"`
 
 ### 3. Multi-Metric Testing
 
@@ -195,37 +195,37 @@ from ab_framework import ABTest
 test = ABTest(name="checkout_redesign", data=df)
 
 # PRIMARY: What we're trying to improve
-@test.metric
+@test.metric(metric_type="proportion")
 def conversion_rate(data):
     """PRIMARY - Main success metric"""
     return data.groupby('user_id')['purchased'].max()
 
 # GUARDRAILS: What we must not harm
-@test.metric
+@test.metric(metric_type="mean")
 def revenue_per_order(data):
     """GUARDRAIL - Ensure we don't reduce order value"""
     orders = data[data['purchased'] == 1]
     return orders.groupby('user_id')['order_value'].sum()
 
-@test.metric
+@test.metric(metric_type="mean")
 def page_load_time(data):
     """GUARDRAIL - Ensure performance doesn't degrade"""
     return data.groupby('user_id')['load_time'].mean()
 
-@test.metric
+@test.metric(metric_type="mean")
 def user_satisfaction(data):
     """GUARDRAIL - Protect user experience"""
     return data.groupby('user_id')['satisfaction_score'].mean()
 
 # DIAGNOSTICS: For understanding behavior
-@test.metric
+@test.metric(metric_type="proportion")
 def cart_abandonment(data):
     """DIAGNOSTIC - Understand funnel behavior"""
     added = data.groupby('user_id')['added_to_cart'].max()
     purchased = data.groupby('user_id')['purchased'].max()
     return ((added == 1) & (purchased == 0)).astype(int)
 
-@test.metric
+@test.metric(metric_type="mean")
 def checkout_page_views(data):
     """DIAGNOSTIC - Track engagement"""
     return data.groupby('user_id')['checkout_views'].sum()
@@ -408,7 +408,7 @@ test = ABTest(
     data=df,
     variant_col="variant",
     unit_id="user_id",
-    allocation_ratio=0.3  # 30% treatment / 70% control
+    treatment_fraction=0.3  # Treatment allocation: 30% treatment / 70% control
 )
 
 # SRM check runs automatically by default
@@ -434,20 +434,23 @@ print(f"Expected: {results.srm_result['expected']}")
 print(f"Deviations: {results.srm_result['deviations_pct']}")
 ```
 
-**Traffic Allocation Options:**
+**Traffic Allocation Options (configured via `setup`)**
 
 ```python
 # 50/50 split (default)
-test1 = ABTest(name="test1", data=df, allocation_ratio=0.5)
+test1 = ABTest(name="test1", data=df)
+test1.setup(treatment_fraction=0.5)
 
 # 70/30 split (70% control, 30% treatment)
-test2 = ABTest(name="test2", data=df, allocation_ratio=0.3)
+test2 = ABTest(name="test2", data=df)
+test2.setup(treatment_fraction=0.3)
 
 # 90/10 split for high-risk changes
-test3 = ABTest(name="test3", data=df, allocation_ratio=0.1)
+test3 = ABTest(name="test3", data=df)
+test3.setup(treatment_fraction=0.1)
 
-# Equal split (when allocation_ratio not specified)
-test4 = ABTest(name="test4", data=df)  # Assumes 50/50
+# Equal split (when treatment_fraction is left as None)
+test4 = ABTest(name="test4", data=df)  # Assumes 50/50 in SRM expectations
 ```
 
 **When SRM is Detected:**
@@ -482,7 +485,7 @@ aa_test = ABTest(
     unit_id="user_id"
 )
 
-@aa_test.metric
+@aa_test.metric(metric_type="mean")
 def key_metric(data):
     return data.groupby('user_id')['metric_value'].mean()
 
@@ -525,7 +528,7 @@ for day in experiment_days:
     n_treatment = day_data[day_data['variant'] == 'B']['user_id'].nunique()
     
     ratio = n_treatment / n_control
-    expected_ratio = allocation_ratio / (1 - allocation_ratio)
+    expected_ratio = treatment_fraction / (1 - treatment_fraction)
     
     # Calculate 95% CI for the ratio
     # Plot: dot at observed ratio, error bar for CI
@@ -586,14 +589,17 @@ for day in range(1, max_day + 1):
 import matplotlib.pyplot as plt
 import pandas as pd
 
-def plot_experiment_progress(df, metric_name, allocation_ratio=0.5):
-    """Generate 3 monitoring graphs for experiment tracking."""
+def plot_experiment_progress(df, metric_name, treatment_fraction=0.5):
+    """Generate 3 monitoring graphs for experiment tracking.
+
+    treatment_fraction: treatment allocation (fraction of traffic sent to treatment).
+    """
     
     fig, axes = plt.subplots(3, 1, figsize=(12, 10))
     
     # Graph 1: SRM History
     ax1 = axes[0]
-    expected_ratio = allocation_ratio / (1 - allocation_ratio)
+    expected_ratio = treatment_fraction / (1 - treatment_fraction)
     
     days = []
     ratios = []
@@ -842,15 +848,15 @@ effect. Consider running the test longer or with a larger sample size,
 or abandon this variant.
 ```
 
-### Programmatic Metric Registration
+### Programmatic Metric Registration (Without `@` Syntax)
 
-If you can't use decorators:
+If you can't use `@test.metric(...)` as a decorator, you can still register metrics by calling it directly:
 
 ```python
 def my_metric(data):
     return data.groupby('user_id')['value'].sum()
 
-test.register_metric('my_metric', my_metric)
+test.metric(metric_type="mean")(my_metric)
 ```
 
 ## Real-World Examples
@@ -860,15 +866,15 @@ test.register_metric('my_metric', my_metric)
 ```python
 test = ABTest(name="checkout_v2", data=df)
 
-@test.metric
+@test.metric(metric_type="proportion")
 def conversion_rate(data):
     return data.groupby('user_id')['purchased'].max()
 
-@test.metric
+@test.metric(metric_type="mean")
 def revenue_per_user(data):
     return data.groupby('user_id')['order_value'].sum()
 
-@test.metric
+@test.metric(metric_type="proportion")
 def cart_abandonment_rate(data):
     added_to_cart = data.groupby('user_id')['added_to_cart'].max()
     purchased = data.groupby('user_id')['purchased'].max()
@@ -886,18 +892,18 @@ results = test.analyze(
 ```python
 test = ABTest(name="video_layout", data=df)
 
-@test.metric
+@test.metric(metric_type="proportion")
 def watch_rate(data):
     """% of users who watched video."""
     return data.groupby('user_id')['video_started'].max()
 
-@test.metric
+@test.metric(metric_type="mean")
 def completion_rate(data):
     """% completion among watchers."""
     watchers = data[data['video_started'] == 1]
     return watchers.groupby('user_id')['completion_pct'].mean()
 
-@test.metric
+@test.metric(metric_type="mean")
 def avg_watch_time(data):
     return data.groupby('user_id')['watch_seconds'].sum()
 
@@ -917,7 +923,7 @@ test = ABTest(
     unit_id="impression_id"  # Not user_id!
 )
 
-@test.metric
+@test.metric(metric_type="proportion")
 def click_through_rate(data):
     return data.set_index('impression_id')['clicked']
 

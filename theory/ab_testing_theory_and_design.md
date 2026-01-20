@@ -715,7 +715,7 @@ p-value ≈ 0.168 → No SRM (within normal variation)
 
 **Framework implementation:**
 
-The framework accepts an `allocation_ratio` parameter (the proportion allocated to treatment) during test initialization. When the SRM check is executed during analysis, the framework:
+The framework accepts a `treatment_fraction` parameter representing the **treatment allocation** (the proportion of traffic allocated to treatment). When the SRM check is executed during analysis, the framework:
 
 1. Computes expected counts based on the allocation ratio and total sample size
 2. Calculates the χ² statistic comparing observed vs expected counts

@@ -617,7 +617,7 @@ t_stat, p_val = stats.ttest_ind(revenue_a, revenue_b)
 # ... formatting ...
 
 # Desired (framework): 5-10 LOC per metric
-@experiment.metric
+@experiment.metric(metric_type="mean")
 def revenue_per_active_user(df):
     active = df[df['sessions'] > 0]
     return active.groupby('user_id')['revenue'].sum()
@@ -628,7 +628,7 @@ results = experiment.analyze([revenue_per_active_user])
 **2. Automatic Statistical Pipeline**
 - Input: DataFrame + metric function + variant column
 - Output: Structured results (p-value, CI, effect size, test used)
-- Automatic test selection (proportion test vs t-test based on data type)
+- Explicit test selection via `metric_type` at registration time
 - Correct CI formulas (pooled for testing, unpooled for CI)
 
 **3. Data Quality Checks**
@@ -719,7 +719,7 @@ results = experiment.analyze([revenue_per_active_user])
 
 1. **Orchestration, Not Statistics** - Use scipy for stats, add coordination layer
 2. **Flexibility First** - Support any metric as a Python function
-3. **Sensible Defaults** - Auto-detect test type, but allow overrides
+3. **Sensible Defaults** - Clear API with explicit metric types
 4. **Fail Safely** - Validate inputs, provide clear error messages
 5. **Composable** - Each component works independently
 
@@ -741,7 +741,7 @@ results = experiment.analyze([revenue_per_active_user])
 ┌─────────────────────────────────────────────────────────┐
 │           Statistical Layer (150-200 LOC)               │
 │  • Wrapper around scipy.stats (t-test, z-test)          │
-│  • Automatic test selection (binary → proportion test)  │
+│  • Explicit test selection via metric_type              │
 │  • CI calculation (correct pooled vs unpooled)          │
 │  • Effect size (Cohen's d, relative lift)               │
 └─────────────────────────────────────────────────────────┘
@@ -780,13 +780,14 @@ test = ABTest(
 )
 
 # Define custom metrics (user-written functions)
-@test.metric
+@test.metric(metric_type="mean")
 def revenue_per_active_user(data):
     """Custom metric: revenue among users with sessions > 0"""
     active = data[data['sessions'] > 0]
     return active.groupby('user_id')['revenue'].sum()
 
-@test.metric  
+# Binary metrics must be registered explicitly
+@test.metric(metric_type="proportion")
 def conversion_rate(data):
     """Simple binary metric"""
     return data['converted'].mean()
@@ -997,11 +998,9 @@ def analyze_metric(df, variant_col, metric_func, alpha=0.05):
     variants = df[variant_col].unique()
     groups = {v: metric_func(df[df[variant_col] == v]) for v in variants}
     
-    # Auto-detect test type
-    if is_binary(groups):
-        result = proportion_test(groups, alpha)
-    else:
-        result = t_test(groups, alpha)
+    # Choose test explicitly (binary vs continuous)
+    # e.g. metric_type="proportion" -> proportion_test; metric_type="mean" -> t_test
+    result = t_test(groups, alpha)
     
     return standardized_output(result)
 

@@ -87,7 +87,7 @@ class StatisticalBackend(ABC):
         mde: float,
         alpha: float = 0.05,
         power: float = 0.80,
-        ratio: float = 1.0,
+        treatment_fraction: float = 0.5,
     ) -> Dict[str, Any]:
         """Plan sample size for a binary/proportion metric.
 
@@ -107,8 +107,9 @@ class StatisticalBackend(ABC):
                 e.g. ``0.05`` for a 5% relative lift over ``baseline_rate``.
             alpha: Significance level for the two-sided test (default 0.05).
             power: Desired statistical power (1 - beta), default ``0.80``.
-            ratio: Planned treatment:control allocation ratio, e.g. ``1.0`` for
-                50/50, ``2.0`` for 2x more users in treatment.
+            treatment_fraction: Planned fraction of experiment traffic allocated
+                to the treatment variant, e.g. ``0.5`` for 50/50,
+                ``0.3`` for 30% treatment / 70% control.
 
         Returns:
             Dictionary containing at least:
@@ -116,8 +117,9 @@ class StatisticalBackend(ABC):
             - ``control_size``: required control group sample size (int)
             - ``treatment_size``: required treatment group sample size (int)
             - ``total_size``: total required sample size (int)
-            - ``assumptions``: nested dict echoing inputs and any useful
-              derived quantities (e.g. absolute MDE, planned treatment rate).
+                        - ``assumptions``: nested dict echoing inputs and any useful
+                            derived quantities (e.g. absolute MDE, planned treatment rate,
+                            internal treatment:control ratio).
 
         Note:
             This API is a *planning helper*; the :class:`ABTest` orchestration

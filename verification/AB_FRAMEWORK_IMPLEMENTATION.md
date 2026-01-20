@@ -21,7 +21,7 @@ A complete A/B testing framework with the following components:
    - `ABTest` class - Main interface for experiment analysis
    - `ExperimentResults` class - Rich results container
    - Decorator-based metric registration
-   - Automatic metric type detection (binary vs continuous)
+    - Explicit metric types at registration time (binary vs continuous)
    - Multi-metric orchestration with Bonferroni/FDR correction
    - Automatic SRM checks
 
@@ -52,16 +52,16 @@ A complete A/B testing framework with the following components:
 ### 1. Decorator-Based Metric Registration
 
 ```python
-@test.metric
+@test.metric(metric_type="proportion")
 def conversion_rate(data):
     return data.groupby('user_id')['converted'].max()
 ```
 
 **Why it matters:** Makes custom metric definition intuitive and Pythonic, solving the "rigid metric definition" problem identified in existing packages.
 
-### 2. Automatic Type Detection
+### 2. Metric Type Selection
 
-The framework automatically detects whether a metric is binary (proportion test) or continuous (t-test) based on the data values, eliminating manual configuration.
+The framework requires you to declare whether a metric is binary (proportion test) or continuous (t-test) via `metric_type=...` when registering the metric.
 
 ### 3. Multi-Metric Orchestration
 
@@ -216,11 +216,11 @@ df = pd.read_csv('experiment.csv')
 test = ABTest(name="checkout_redesign", data=df)
 
 # Define metrics with simple decorators
-@test.metric
+@test.metric(metric_type="proportion")
 def conversion_rate(data):
     return data.groupby('user_id')['purchased'].max()
 
-@test.metric
+@test.metric(metric_type="mean")
 def revenue_per_user(data):
     return data.groupby('user_id')['revenue'].sum()
 

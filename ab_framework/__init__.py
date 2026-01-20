@@ -16,7 +16,7 @@ Features:
 Example:
     >>> from ab_framework import ABTest
     >>> test = ABTest(name="homepage_redesign", data=df)
-    >>> @test.metric
+    >>> @test.metric(metric_type="proportion")
     ... def conversion_rate(data):
     ...     return data.groupby('user_id')['converted'].max()
     >>> results = test.analyze(['conversion_rate'])

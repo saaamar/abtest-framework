@@ -1,6 +1,6 @@
 """Core ABTest class for experiment analysis."""
 
-from typing import Dict, List, Callable, Optional, Any, Literal
+from typing import Dict, List, Callable, Optional, Any, Literal, Sequence
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -28,7 +28,7 @@ class ABTest:
         ...     unit_id="user_id"
         ... )
         >>> 
-        >>> @test.metric
+        >>> @test.metric(metric_type="proportion")
         ... def conversion_rate(data):
         ...     return data.groupby('user_id')['converted'].max()
         >>> 
@@ -43,39 +43,41 @@ class ABTest:
         variant_col: str = 'variant',
         unit_id: str = 'user_id',
         backend: Optional[StatisticalBackend] = None,
-        alpha: float = 0.05,
         variants: Optional[List[str]] = None,
-        timestamp: Optional[str] = None,
-        allocation_ratio: Optional[float] = None,
     ):
         """Initialize A/B test.
         
         Args:
             name: Experiment name
-            data: DataFrame with experiment data (event-level or aggregated)
+            data: DataFrame with experiment data (event-level or aggregated).
+                This is stored on the ABTest instance and is the dataset
+                that registered metric functions and :meth:`analyze` will
+                operate on. In other words, metrics assume ``self.data`` is
+                available; you do not pass a separate DataFrame into
+                :meth:`analyze`.
             variant_col: Column name containing variant assignments ('A', 'B', etc.)
             unit_id: Column name for randomization unit (usually 'user_id')
-            backend: Statistical backend (defaults to AbexpBackend)
-            alpha: Significance level (default 0.05)
-            allocation_ratio: Proportion of traffic to treatment (e.g., 0.3 for 30% treatment / 70% control)
-                If None, assumes equal 50/50 split
+            backend: Statistical backend (defaults to ScipyBackend)
         """
         self.name = name
         self.data = data.copy()
         self.variant_col = variant_col
         self.unit_id = unit_id
         self.backend = backend if backend is not None else ScipyBackend()
-        self.alpha = alpha
-        # Allow callers (like the webapp) to control the analysis timestamp,
-        # but default to "now" for backward compatibility.
-        self.timestamp = timestamp or datetime.now().isoformat()
+        # Default significance level for hypothesis tests. This can be
+        # overridden later via ``setup(alpha=...)``.
+        self.alpha: float = 0.05
+        # Analysis timestamp can be configured via ``setup(timestamp=...)``.
+        # If left as None, it will be filled in at analysis time.
+        self.timestamp: Optional[str] = None
         
         # Explicit variants configuration (e.g. ["A", "B"])
         self.variants: Optional[List[str]] = variants
         
-        # Allocation ratio: proportion of traffic to treatment
-        # E.g., 0.3 means 30% treatment / 70% control
-        self.allocation_ratio = allocation_ratio
+        # Treatment fraction: proportion of traffic to treatment.
+        # E.g., 0.3 means 30% treatment / 70% control. This is configured
+        # post-construction via ``setup(treatment_fraction=...)``.
+        self.treatment_fraction: Optional[float] = None
         
         # Metric registry: name -> metadata dict.
         # For backward compatibility this at least contains:
@@ -86,7 +88,7 @@ class ABTest:
         
         # Validate inputs
         self._validate_data()
-    
+
     def _validate_data(self):
         """Validate input data structure."""
         if self.variant_col not in self.data.columns:
@@ -114,7 +116,7 @@ class ABTest:
         self,
         func: Callable = None,
         *,
-        metric_type: str,
+        metric_type: Literal["proportion", "mean"],
         is_primary: bool = False,
         monitor_alpha: Optional[float] = None,
         monitor_power: Optional[float] = None,
@@ -164,52 +166,50 @@ class ABTest:
         if func is not None:
             return decorator(func)
         return decorator
-    
-    def register_metric(
-        self,
-        name: str,
-        func: Callable,
-        metric_type: str,
-        is_primary: bool = False,
-        monitor_alpha: Optional[float] = None,
-        monitor_power: Optional[float] = None,
-        inferiority_margin: Optional[float] = None,
-    ):
-        """Register a metric function programmatically.
-        
-        Alternative to the @metric decorator for dynamic registration.
-        
-        Args:
-            name: Metric name
-            func: Metric function that takes DataFrame and returns Series
-            metric_type: Type hint ("proportion" or "mean").
-        """
-        if metric_type not in ("proportion", "mean"):
-            raise ValueError("metric_type must be 'proportion' or 'mean'")
-        if is_primary:
-            existing_primary = getattr(self, "_primary_metric", None)
-            if existing_primary is not None and existing_primary != name:
-                raise ValueError(f"Primary metric already set to '{existing_primary}'. Only one primary metric is allowed.")
-            self._primary_metric = name
-        self._metrics[name] = {
-            "func": func,
-            "metric_type": metric_type,
-            "is_primary": is_primary,
-            "monitor_alpha": monitor_alpha,
-            "monitor_power": monitor_power,
-            "inferiority_margin": inferiority_margin,
-        }
 
-    def set_primary_metric(self, metric_name: str):
-        """Convenience method to set the primary metric after registration."""
-        if metric_name not in self._metrics:
-            raise ValueError(f"Primary metric '{metric_name}' is not registered")
-        existing_primary = getattr(self, "_primary_metric", None)
-        if existing_primary is not None and existing_primary != metric_name:
-            raise ValueError(f"Primary metric already set to '{existing_primary}'. Only one primary metric is allowed.")
-        self._primary_metric = metric_name
-        # Update registry flag for consistency
-        self._metrics[metric_name]["is_primary"] = True
+    @property
+    def active_metrics(self) -> List[str]:
+        """List of currently registered metric names.
+
+        This reflects the metric registry state at access time (i.e. it is
+        computed from ``self._metrics`` and is not separately stored).
+        """
+        return list(self._metrics.keys())
+
+    def setup(
+        self,
+        *,
+        alpha: Optional[float] = None,
+        treatment_fraction: Optional[float] = None,
+        timestamp: Optional[str] = None,
+    ) -> None:
+        """Configure analysis parameters after construction.
+
+        This lets you separate *planning* from *analysis*:
+
+        - Use backend-level helpers (e.g. :meth:`StatisticalBackend.sample_size_proportion`)
+          for pre-experiment sample-size and power calculations with arbitrary
+          ``alpha``, ``power``, ``mde``, etc.
+        - Once you decide on the final analysis settings, call ``setup()`` to
+          store them on the :class:`ABTest` instance so that :meth:`analyze`
+          and SRM checks use the same configuration consistently.
+
+        Args:
+            alpha: Significance level to use for hypothesis tests
+                and multiple-testing corrections.
+            treatment_fraction: Expected fraction of traffic allocated to
+                the treatment variant for SRM expectations (e.g., ``0.5``
+                for a 50/50 split, ``0.3`` for 30/70).
+            timestamp: Optional ISO-8601 analysis timestamp. If not set,
+                it will default to the current time when :meth:`analyze`
+                is first called.
+        """
+        if alpha is not None:
+            self.alpha = alpha
+        if treatment_fraction is not None:
+            self.treatment_fraction = treatment_fraction
+        if timestamp is not None:
+            self.timestamp = timestamp
     
     def _compute_metric(self, metric_name: str) -> pd.DataFrame:
         """Compute metric values for all units.
@@ -269,7 +269,7 @@ class ABTest:
         
         # Determine metric type (must be provided at registration time)
         entry = self._metrics.get(metric_name)
-        if not entry or "metric_type" not in entry:
+        if not entry or "metric_type" not in entry or entry["metric_type"] is None:
             raise ValueError(
                 f"Metric '{metric_name}' is missing required metric_type; "
                 "register it with metric_type='proportion' or 'mean'."
@@ -278,9 +278,9 @@ class ABTest:
 
         if metric_type == "proportion":
             # Proportion test
-            successes_a = int(data_a.sum())
+            successes_a = int(np.nansum(data_a))
             trials_a = len(data_a)
-            successes_b = int(data_b.sum())
+            successes_b = int(np.nansum(data_b))
             trials_b = len(data_b)
             
             result = self.backend.proportion_z_test(
@@ -346,7 +346,7 @@ class ABTest:
             pass
         
         return result
-    
+
     def analyze(
         self,
         metrics: Optional[List[str]] = None,
@@ -356,22 +356,33 @@ class ABTest:
         """Analyze experiment metrics.
         
         Args:
-            metrics: Optional list of metric names to analyze.
-                Defaults to all registered metrics.
-            correction: Multiple testing correction ('bonferroni', 'fdr', or None)
+            metrics: Optional list of metric names to analyze (a subset of the
+                registered metrics). Defaults to all registered metrics.
+                All provided names must already be registered.
+            correction: Optional multiple-testing correction to control false
+                positives when analyzing multiple metrics (e.g. ``"bonferroni"``
+                or ``"fdr"``). This is only applied when analyzing more than one
+                metric; otherwise it is ignored (keep it None).
             run_srm_check: Whether to run SRM check (default True)
         
         Returns:
             ExperimentResults object with all analysis results.
         """
-        # Determine variants: always use configured variants (validated in __init__)
+        # Determine variants: use configured variants only (validated in __init__)
         if not self.variants or len(self.variants) != 2:
             raise ValueError("ABTest.variants must contain exactly 2 variant labels")
         variant_a, variant_b = self.variants
         
         # Determine metrics: default to all registered metrics
         if metrics is None:
-            metrics = list(self._metrics.keys())
+            metrics = self.active_metrics
+        else:
+            unknown = [m for m in metrics if m not in self._metrics]
+            if unknown:
+                raise ValueError(
+                    f"Unknown metrics {unknown}. "
+                    f"Registered metrics: {self.active_metrics}"
+                )
         if not metrics:
             raise ValueError("No metrics specified and no metrics registered")
         
@@ -383,14 +394,14 @@ class ABTest:
             counts_filtered = {k: v for k, v in counts.items() if k in [variant_a, variant_b]}
             checker = QualityChecker()
             
-            # Build expected_ratio dict based on allocation_ratio if provided
+            # Build expected_ratio dict based on treatment_fraction if provided
             expected_ratio = None
-            if self.allocation_ratio is not None:
-                # allocation_ratio is proportion for treatment (variant_b)
+            if self.treatment_fraction is not None:
+                # treatment_fraction is proportion for treatment (variant_b)
                 # control (variant_a) gets the remainder
                 expected_ratio = {
-                    variant_a: 1.0 - self.allocation_ratio,
-                    variant_b: self.allocation_ratio
+                    variant_a: 1.0 - self.treatment_fraction,
+                    variant_b: self.treatment_fraction
                 }
             
             srm_result = checker.check_srm(counts_filtered, expected_ratio=expected_ratio)
@@ -412,6 +423,11 @@ class ABTest:
         if correction and len(metrics) > 1:
             metric_results = self._apply_correction(metric_results, correction)
         
+        # Ensure we have an analysis timestamp; if the caller did not
+        # configure one via ``setup(timestamp=...)``, default to now.
+        if self.timestamp is None:
+            self.timestamp = datetime.now().isoformat()
+
         # Create results object
         return ExperimentResults(
             experiment_name=self.name,
@@ -420,7 +436,7 @@ class ABTest:
             srm_result=srm_result,
             alpha=self.alpha,
             correction=correction,
-            variants=self.variants,
+            variants=[variant_a, variant_b],
             primary_metric=getattr(self, "_primary_metric", None),
         )
     

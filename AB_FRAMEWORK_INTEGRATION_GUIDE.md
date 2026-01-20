@@ -83,9 +83,13 @@ test = ABTest(
     data=df,
     variant_col="variant",               # Column containing agent assignments
     unit_id="conversation_id",           # Column with unique conversation identifiers
-    alpha=0.05,                          # Significance level (default: 0.05)
     variants=["control", "treatment"],   # Optional: specify exact variants to test
-    allocation_ratio=0.3                 # Optional: % traffic to new agent (0.3 = 30% treatment, 70% control)
+)
+
+# Configure analysis knobs after construction
+test.setup(
+    alpha=0.05,                 # Significance level (default is 0.05 if omitted)
+    treatment_fraction=0.3,     # Treatment allocation: 30% treatment / 70% control (for SRM expectations)
 )
 ```
 
@@ -98,12 +102,12 @@ test = ABTest(
 | `data` | DataFrame | ✅ | Your experiment data | See data structure above |
 | `variant_col` | string | ✅ | Column name with variant assignments | "variant" |
 | `unit_id` | string | ✅ | Column name with user/unit IDs | "conversation_id" |
-| `alpha` | float | ❌ | Significance level (2-tailed test) | Default: 0.05 |
+| `alpha` | float | ❌ | Significance level (2-tailed test); configured via `setup(alpha=...)` | Default: 0.05 |
 | `variants` | list | ❌ | Specific variants to analyze | Default: First 2 variants found |
-| `allocation_ratio` | float | ❌ | Treatment allocation % | Default: None (assumes 50/50) |
+| `treatment_fraction` | float | ❌ | Treatment allocation: fraction of experiment traffic allocated to the treatment variant (e.g., 0.3 = 30% treatment / 70% control). Configure via `setup(treatment_fraction=...)`. Used for SRM expectations in SRM checks. | Default: None (assumes equal allocation across variants) |
 
 ### Metric Definition:
-You must define metrics using decorators or programmatic registration:
+You must define metrics using the `metric(...)` decorator API:
 
 ```python
 # Option 1: Decorator (recommended)
@@ -117,16 +121,11 @@ def resolved_rate(data):
     """Calculate session resolution rate per conversation"""
     return data.groupby('conversation_id')['resolved'].max()  # 1 if conversation was resolved
 
-# Option 2: Programmatic registration
-def quality_rate_func(data):
+# Option 2: Programmatic (without using @ syntax)
+def quality_rate(data):
     return data.groupby('conversation_id')['quality'].max()
 
-test.register_metric(
-    name="quality_rate",
-    func=quality_rate_func,
-    metric_type="proportion",
-    is_primary=True
-)
+test.metric(metric_type="proportion", is_primary=True)(quality_rate)
 ```
 
 #### Metric Types:
@@ -264,21 +263,17 @@ structured_data = results.to_dict()
 For planning experiments before you have data:
 
 ```python
-# Initialize with minimal data structure (just for backend access)
-planner = ABTest(
-    name="planning",
-    data=pd.DataFrame({"user_id": ["dummy"], "variant": ["A"]}),
-    variant_col="variant",
-    unit_id="user_id"
-)
+from ab_framework import ScipyBackend
+
+backend = ScipyBackend()
 
 # Plan for proportion metric (e.g., AI quality rate)
-sample_size = planner.backend.sample_size_proportion(
+sample_size = backend.sample_size_proportion(
     baseline_rate=0.45,        # Current AI quality rate (45%)
     mde=0.10,                  # Minimum detectable effect (10% relative lift)
     alpha=0.05,                # Significance level
     power=0.80,                # Statistical power (80%)
-    ratio=1.0                  # Treatment:control ratio (1.0 = 50/50 split)
+    treatment_fraction=0.5,    # 50/50 variant split
 )
 
 # Returns:
@@ -369,7 +364,7 @@ results.metric_results["problematic_metric"] = {
 ### Required Integration Steps:
 - [ ] Import `ABTest` from `ab_framework`
 - [ ] Initialize `ABTest` with your data and configuration
-- [ ] Register metrics using `@test.metric` decorator or `register_metric()`
+- [ ] Register metrics using `@test.metric(metric_type=...)`
 - [ ] Call `test.analyze()` to get results
 - [ ] Parse `ExperimentResults` object for your UI/reporting needs
 

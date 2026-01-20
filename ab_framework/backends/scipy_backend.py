@@ -140,7 +140,7 @@ class ScipyBackend(StatisticalBackend):
         mde: float,
         alpha: float = 0.05,
         power: float = 0.80,
-        ratio: float = 1.0,
+        treatment_fraction: float = 0.5,
     ) -> Dict[str, Any]:
         """Plan sample size for proportion metrics using standard formulas.
         
@@ -149,7 +149,8 @@ class ScipyBackend(StatisticalBackend):
             mde: Minimum detectable effect as relative change
             alpha: Significance level (default 0.05)
             power: Desired statistical power (default 0.80)
-            ratio: Treatment:control allocation ratio (default 1.0)
+            treatment_fraction: Fraction of experiment traffic allocated to
+                treatment (default 0.5 for 50/50 split)
         
         Returns:
             Dictionary with sample size requirements
@@ -165,6 +166,13 @@ class ScipyBackend(StatisticalBackend):
         z_alpha = stats.norm.ppf(1 - alpha / 2)  # Two-tailed
         z_beta = stats.norm.ppf(power)
         
+        # Convert treatment fraction to internal treatment:control ratio
+        # (used by the closed-form formulas).
+        if 0.0 < treatment_fraction < 1.0:
+            ratio = treatment_fraction / (1.0 - treatment_fraction)
+        else:
+            ratio = 1.0
+
         # Sample size calculation (equal allocation adjusted for ratio)
         n_control = (
             (z_alpha + z_beta)**2 * pooled_variance * (1 + 1/ratio) 
@@ -185,6 +193,7 @@ class ScipyBackend(StatisticalBackend):
                 'mde_absolute': treatment_rate - baseline_rate,
                 'alpha': alpha,
                 'power': power,
+                'treatment_fraction': treatment_fraction,
                 'ratio': ratio,
                 'pooled_rate': pooled_rate,
             },

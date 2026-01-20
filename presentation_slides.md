@@ -298,7 +298,7 @@ Ground Truth: p=0.383397, A=0.1000, B=0.1120
 # Same code works whether using owl, scipy, or future packages
 test = ABTest(name="pricing_test", data=df, variant_col="variant", unit_id="user_id")
 
-@test.metric
+@test.metric(metric_type="proportion")
 def conversion_rate(data):
     return data.groupby('user_id')['converted'].max()
 

@@ -74,7 +74,8 @@ Goal: Build a small Flask web app (in `webapp/` under repo root) to plan and mon
   - `power ∈ (0,1)` — **UI label:** "Power".
   - `mde_percent > 0` — **UI label:** "MDE (%)"; internally converted to relative lift:
     - `mde_relative = mde_percent / 100`.
-  - Optional `allocation_ratio ∈ (0,1)` (default 0.5).
+  - Optional `allocation_ratio ∈ (0,1)` (default 0.5) — treatment allocation (fraction of traffic sent to treatment).
+    In the framework, this maps to `ABTest.setup(treatment_fraction=...)`.
   - Optional `daily_per_variant > 0` (can be derived from recent data or user-entered).
   - Guard margin (optional): `inferiority_margin ≥ 0` (informational for NI checks in analysis).
 
@@ -136,7 +137,8 @@ Suggested schema (logical):
   - `alpha` REAL
   - `power` REAL
   - `mde_relative` REAL  -- stored as fraction (e.g. 0.05 for 5%)
-  - `allocation_ratio` REAL  -- treatment traffic share (e.g. 0.5)
+  - `allocation_ratio` REAL  -- treatment allocation (treatment traffic share, e.g. 0.5).
+    In the framework, this maps to `ABTest.setup(treatment_fraction=...)`.
 
 - `experiment_metrics`
   - `id` INTEGER PRIMARY KEY
@@ -399,7 +401,7 @@ Concrete structure for the setup screen content (inside `configure_experiment.ht
         <summary>Advanced options</summary>
         <div class="form-row two-col">
           <div class="form-field">
-            <label for="allocation" class="form-label">Traffic split (treatment)</label>
+            <label for="allocation" class="form-label">Treatment allocation (% of traffic to treatment)</label>
             <input id="allocation" name="allocation_ratio" type="number"
                    step="0.05" min="0.1" max="0.9"
                    class="form-input" value="0.5">
@@ -594,7 +596,7 @@ Behavior for Screen 2:
 - Planning params:
   - `alpha, power ∈ (0,1)`.
   - `mde_percent > 0` (percentage; converted to `mde_relative = mde_percent / 100`).
-  - `allocation_ratio ∈ (0,1)`; default 0.5 if omitted.
+  - `allocation_ratio ∈ (0,1)`; default 0.5 if omitted (maps to framework `treatment_fraction`).
 - Proportion metrics:
   - `baseline_rate ∈ [0,1]` (estimated from `data/agent_data/`; not user-entered directly).
 - Optional:

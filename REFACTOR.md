@@ -113,53 +113,26 @@ def metric(
     return decorator
 ```
 
-Programmatic registration:
+Programmatic registration (without using `@` syntax):
 
 ```python
-def register_metric(
-    self,
-    name: str,
-    func: Callable,
-    metric_type: str,
-    is_primary: bool = False,
-    monitor_alpha: Optional[float] = None,
-    monitor_power: Optional[float] = None,
-    inferiority_margin: Optional[float] = None,
-):
-    if metric_type not in ("proportion", "mean"):
-        raise ValueError(...)
-    if is_primary:
-        existing_primary = getattr(self, "_primary_metric", None)
-        if existing_primary is not None and existing_primary != name:
-            raise ValueError("Primary metric already set ...")
-        self._primary_metric = name
+def my_metric(data):
+    return data.groupby('user_id')['value'].sum()
 
-    self._metrics[name] = {
-        "func": func,
-        "metric_type": metric_type,
-        "is_primary": is_primary,
-        "monitor_alpha": monitor_alpha,
-        "monitor_power": monitor_power,
-        "inferiority_margin": inferiority_margin,
-    }
+test.metric(metric_type="mean")(my_metric)
 ```
 
-Convenience to set primary later:
+Primary metric selection is done at registration time:
 
 ```python
-def set_primary_metric(self, metric_name: str):
-    if metric_name not in self._metrics:
-        raise ValueError(...)
-    existing_primary = getattr(self, "_primary_metric", None)
-    if existing_primary is not None and existing_primary != metric_name:
-        raise ValueError(...)
-    self._primary_metric = metric_name
-    self._metrics[metric_name]["is_primary"] = True
+@test.metric(metric_type="proportion", is_primary=True)
+def conversion_rate(data):
+    return data.groupby("user_id")["converted"].max()
 ```
 
 **Key behavior now:**
 
-- Exactly one metric may be designated as primary (`is_primary=True` or via `set_primary_metric`).
+- Exactly one metric may be designated as primary (`is_primary=True`).
 - All other metrics act as **monitors** (soft monitoring) and do **not** block decisions.
 
 ---

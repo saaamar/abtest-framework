@@ -48,7 +48,7 @@ def test_scenario1_framework() -> Dict[str, Any]:
         # 1 if user converted in any impression
         return data.groupby("user_id")["converted"].max()
 
-    results = test.analyze(metrics=["conversion_rate"], variants=["A", "B"])
+    results = test.analyze(metrics=["conversion_rate"])
     res = list(results.metric_results.values())[0]
 
     elapsed = time.time() - start
@@ -89,7 +89,7 @@ def test_scenario2_framework() -> Dict[str, Any]:
         # Sum session revenue per user (all users are active)
         return data.groupby("user_id")["session_revenue"].sum()
 
-    results = test.analyze(metrics=["revenue_per_user"], variants=["A", "B"])
+    results = test.analyze(metrics=["revenue_per_user"])
     res = list(results.metric_results.values())[0]
 
     elapsed = time.time() - start
@@ -143,9 +143,9 @@ def test_scenario3_framework() -> Dict[str, Any]:
         variant_col="variant",
         unit_id="impression_id",
     )
-    test_ctr.register_metric("ctr_impression", ctr_impression, metric_type="proportion")
+    test_ctr.metric(metric_type="proportion")(ctr_impression)
 
-    results = test_ctr.analyze(metrics=["ctr_impression"], variants=["A", "B"])
+    results = test_ctr.analyze(metrics=["ctr_impression"])
     res = list(results.metric_results.values())[0]
 
     elapsed = time.time() - start
@@ -195,7 +195,7 @@ def test_scenario4_framework() -> Dict[str, Any]:
 
     metrics = ["converted_any", "total_order_value", "total_revenue"]
 
-    results = test.analyze(metrics=metrics, variants=["A", "B"], correction="bonferroni")
+    results = test.analyze(metrics=metrics, correction="bonferroni")
 
     elapsed = time.time() - start
 
@@ -240,7 +240,7 @@ def _binary_scenario(name: str, csv: str, value_col: str) -> Dict[str, Any]:
         # Aggregate per user as mean of the binary flag across sessions
         return data.groupby("user_id")[value_col].mean()
 
-    results = test.analyze(metrics=["binary_metric"], variants=["A", "B"])
+    results = test.analyze(metrics=["binary_metric"])
     res = list(results.metric_results.values())[0]
 
     elapsed = time.time() - start
@@ -277,7 +277,7 @@ def _continuous_scenario(name: str, csv: str, value_col: str) -> Dict[str, Any]:
     def metric_value(data: pd.DataFrame) -> pd.Series:
         return data.groupby("user_id")[value_col].mean()
 
-    results = test.analyze(metrics=["metric_value"], variants=["A", "B"])
+    results = test.analyze(metrics=["metric_value"])
     res = list(results.metric_results.values())[0]
 
     elapsed = time.time() - start

@@ -417,7 +417,11 @@ test = ABTest(
     data=df,
     variant_col="variant",
     unit_id="user_id",
-    allocation_ratio=0.3  # 30% treatment, 70% control
+)
+
+# Configure analysis knobs (including treatment allocation) after construction
+test.setup(
+    treatment_fraction=0.3,  # Treatment allocation: 30% of traffic to treatment, 70% to control
 )
 
 # Run analysis with automatic SRM check

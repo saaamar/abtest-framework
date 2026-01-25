@@ -47,19 +47,21 @@ def test_scenario2_revenue_synthetic():
 
 	test = ABTest(
 		name="scenario2_revenue",
-		data=df,
-		variant_col="variant",
-		unit_id="user_id",
+		variants=["A", "B"],
 	)
 
 	@test.metric(metric_type="mean")
 	def revenue_per_active_user(data):
 		"""Revenue per user, filtered to active users (revenue > 0)."""
-		user_revenue = data.groupby("user_id")["session_revenue"].sum()
-		active = user_revenue[user_revenue > 0]
-		return active
+		user_rev = data.groupby(["variant", "user_id"])["session_revenue"].sum().reset_index()
+		user_rev = user_rev[user_rev["session_revenue"] > 0]
+		summary = user_rev.groupby("variant")["session_revenue"].agg(["mean", "std", "count"]).to_dict("index")
+		return {
+			v: {"mean": float(d["mean"]), "std": float(d["std"]), "n": int(d["count"])}
+			for v, d in summary.items()
+		}
 
-	results = test.analyze(["revenue_per_active_user"])
+	results = test.analyze(df, metrics=["revenue_per_active_user"], run_srm_check=False)
 	result = results.metric_results["revenue_per_active_user"]
 	assert "p_value" in result
 	assert 0 <= result["p_value"] <= 1

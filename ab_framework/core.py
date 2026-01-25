@@ -1,7 +1,6 @@
 """Core ABTest class for experiment analysis."""
 
-from typing import Dict, List, Callable, Optional, Any, Literal, Sequence
-import pandas as pd
+from typing import Dict, List, Callable, Optional, Any, Literal, Mapping, TYPE_CHECKING
 import numpy as np
 from datetime import datetime
 import traceback
@@ -9,39 +8,35 @@ import traceback
 from .backends import ScipyBackend, StatisticalBackend
 from .quality import QualityChecker
 
+if TYPE_CHECKING:  # pragma: no cover
+    import pandas as pd
+
 class ABTest:
     """Main class for A/B test analysis.
     
     This class orchestrates the entire A/B testing workflow:
     - Metric registration
-    - Data validation
     - Statistical testing
     - Multi-metric orchestration
     - Quality checks (SRM)
     - Result reporting
     
     Example:
-        >>> test = ABTest(
-        ...     name="homepage_redesign",
-        ...     data=df,
-        ...     variant_col="variant",
-        ...     unit_id="user_id"
-        ... )
+        >>> test = ABTest(name="homepage_redesign", variants=["A", "B"])
         >>> 
         >>> @test.metric(metric_type="proportion")
         ... def conversion_rate(data):
-        ...     return data.groupby('user_id')['converted'].max()
+        ...     per_user = data.groupby(['variant', 'user_id'])['converted'].max().reset_index()
+        ...     summary = per_user.groupby('variant')['converted'].agg(['sum', 'count']).to_dict('index')
+        ...     return {v: {'successes': int(d['sum']), 'n': int(d['count'])} for v, d in summary.items()}
         >>> 
-        >>> results = test.analyze(['conversion_rate'])
+        >>> results = test.analyze(df, metrics=['conversion_rate'], run_srm_check=False)
         >>> print(results.summary())
     """
     
     def __init__(
         self,
         name: str,
-        data: pd.DataFrame,
-        variant_col: str = 'variant',
-        unit_id: str = 'user_id',
         backend: Optional[StatisticalBackend] = None,
         variants: Optional[List[str]] = None,
     ):
@@ -49,20 +44,13 @@ class ABTest:
         
         Args:
             name: Experiment name
-            data: DataFrame with experiment data (event-level or aggregated).
-                This is stored on the ABTest instance and is the dataset
-                that registered metric functions and :meth:`analyze` will
-                operate on. In other words, metrics assume ``self.data`` is
-                available; you do not pass a separate DataFrame into
-                :meth:`analyze`.
-            variant_col: Column name containing variant assignments ('A', 'B', etc.)
-            unit_id: Column name for randomization unit (usually 'user_id')
             backend: Statistical backend (defaults to ScipyBackend)
+            variants: Variant labels for control and treatment, e.g. ["A", "B"].
+                Since the core is schema-agnostic and does not inspect raw data,
+                variants cannot be inferred automatically and must be provided
+                (or defaults are used).
         """
         self.name = name
-        self.data = data.copy()
-        self.variant_col = variant_col
-        self.unit_id = unit_id
         self.backend = backend if backend is not None else ScipyBackend()
         # Default significance level for hypothesis tests. This can be
         # overridden later via ``setup(alpha=...)``.
@@ -71,8 +59,9 @@ class ABTest:
         # If left as None, it will be filled in at analysis time.
         self.timestamp: Optional[str] = None
         
-        # Explicit variants configuration (e.g. ["A", "B"])
-        self.variants: Optional[List[str]] = variants
+        # Explicit variants configuration (e.g. ["A", "B"]).
+        # When not provided, default to the canonical A/B labels.
+        self.variants: List[str] = list(variants) if variants is not None else ["A", "B"]
         
         # Treatment fraction: proportion of traffic to treatment.
         # E.g., 0.3 means 30% treatment / 70% control. This is configured
@@ -86,31 +75,8 @@ class ABTest:
         # can be added later without breaking existing users.
         self._metrics: Dict[str, Dict[str, Any]] = {}
         
-        # Validate inputs
-        self._validate_data()
-
-    def _validate_data(self):
-        """Validate input data structure."""
-        if self.variant_col not in self.data.columns:
-            raise ValueError(f"Variant column '{self.variant_col}' not found in data")
-        
-        if self.unit_id not in self.data.columns:
-            raise ValueError(f"Unit ID column '{self.unit_id}' not found in data")
-        
-        data_variants = sorted(self.data[self.variant_col].unique())
-        if len(data_variants) < 2:
-            raise ValueError(f"Need at least 2 variants, found {len(data_variants)}")
-        
-        # If explicit variants were provided, validate them against the data
-        if self.variants is not None:
-            if len(self.variants) != 2:
-                raise ValueError(f"'variants' must contain exactly 2 labels, got {self.variants}")
-            missing = [v for v in self.variants if v not in data_variants]
-            if missing:
-                raise ValueError(f"Configured variants {missing} not found in data")
-        else:
-            # Default: first 2 variants in sorted order
-            self.variants = data_variants[:2]
+        if len(self.variants) != 2:
+            raise ValueError(f"'variants' must contain exactly 2 labels, got {self.variants}")
     
     def metric(
         self,
@@ -124,11 +90,24 @@ class ABTest:
     ) -> Callable:
         """Decorator to register a metric function.
         
-        The metric function should take a DataFrame and return a pandas Series
-        indexed by unit_id with the metric value for each unit.
+                The framework core is schema-agnostic: it does not inspect raw data
+                objects (pandas, SQL rows, API responses, etc.). Metric functions are
+                responsible for knowing the experiment schema and returning per-variant
+                **summary statistics** required for hypothesis tests.
+
+                Metric functions are called as ``metric_func(data)`` where ``data`` is
+                whatever object you pass to :meth:`analyze`.
+
+                Required return shapes:
+
+                - For ``metric_type="proportion"``:
+                    ``{variant: {"successes": int, "n": int}, ...}``
+                - For ``metric_type="mean"``:
+                    ``{variant: {"mean": float, "std": float, "n": int}, ...}``
 
         Args:
-            func: Metric function that takes DataFrame and returns Series.
+            func: Metric function that takes ``data`` and returns per-variant
+                summary statistics.
                 When omitted (i.e. using ``@test.metric(metric_type="proportion")``),
                 the decorator will return a configured wrapper.
             metric_type: Required hint for how this metric should be analyzed.
@@ -210,42 +189,25 @@ class ABTest:
             self.treatment_fraction = treatment_fraction
         if timestamp is not None:
             self.timestamp = timestamp
-    
-    def _compute_metric(self, metric_name: str) -> pd.DataFrame:
-        """Compute metric values for all units.
-        
-        Args:
-            metric_name: Name of registered metric
-        
-        Returns:
-            DataFrame with columns: [unit_id, variant, metric_value]
-        """
+
+    def _compute_metric_stats(self, metric_name: str, data: Any) -> Mapping[str, Mapping[str, Any]]:
         if metric_name not in self._metrics:
             raise ValueError(f"Metric '{metric_name}' not registered")
-        entry = self._metrics[metric_name]
-        metric_func = entry["func"]
-        
-        # Apply metric function
-        metric_values = metric_func(self.data)
-        
-        # Convert to DataFrame if Series
-        if isinstance(metric_values, pd.Series):
-            metric_df = metric_values.reset_index()
-            metric_df.columns = [self.unit_id, 'metric_value']
-        else:
-            raise TypeError(f"Metric function must return pandas Series, got {type(metric_values)}")
-        
-        # Join with variant assignments
-        variants = self.data[[self.unit_id, self.variant_col]].drop_duplicates()
-        result = metric_df.merge(variants, on=self.unit_id, how='left')
-        
-        return result
+        metric_func = self._metrics[metric_name]["func"]
+
+        stats = metric_func(data)
+        if not isinstance(stats, Mapping):
+            raise TypeError(
+                f"Metric '{metric_name}' must return a mapping of per-variant stats, got {type(stats)}"
+            )
+        return stats
     
     def _test_metric(
         self,
         metric_name: str,
         variant_a: str,
-        variant_b: str
+        variant_b: str,
+        data: Any,
     ) -> Dict[str, Any]:
         """Test a single metric between two variants.
         
@@ -257,15 +219,12 @@ class ABTest:
         Returns:
             Dictionary with test results
         """
-        # Compute metric
-        metric_df = self._compute_metric(metric_name)
-        
-        # Split by variant
-        data_a = metric_df[metric_df[self.variant_col] == variant_a]['metric_value'].values
-        data_b = metric_df[metric_df[self.variant_col] == variant_b]['metric_value'].values
-        
-        if len(data_a) == 0 or len(data_b) == 0:
-            raise ValueError(f"No data for one or both variants: {variant_a}={len(data_a)}, {variant_b}={len(data_b)}")
+        metric_stats = self._compute_metric_stats(metric_name, data)
+        if variant_a not in metric_stats or variant_b not in metric_stats:
+            raise ValueError(
+                f"Metric '{metric_name}' must provide stats for variants {self.variants}, "
+                f"got keys={list(metric_stats.keys())}"
+            )
         
         # Determine metric type (must be provided at registration time)
         entry = self._metrics.get(metric_name)
@@ -277,11 +236,19 @@ class ABTest:
         metric_type = entry["metric_type"]
 
         if metric_type == "proportion":
-            # Proportion test
-            successes_a = int(np.nansum(data_a))
-            trials_a = len(data_a)
-            successes_b = int(np.nansum(data_b))
-            trials_b = len(data_b)
+            a = metric_stats[variant_a]
+            b = metric_stats[variant_b]
+            if "successes" not in a or "n" not in a or "successes" not in b or "n" not in b:
+                raise ValueError(
+                    f"Proportion metric '{metric_name}' must return per-variant {{'successes','n'}}. "
+                    f"Got A={a} B={b}"
+                )
+            successes_a = int(a["successes"])
+            trials_a = int(a["n"])
+            successes_b = int(b["successes"])
+            trials_b = int(b["n"])
+            if trials_a <= 0 or trials_b <= 0:
+                raise ValueError(f"Invalid n for proportion metric '{metric_name}': A.n={trials_a}, B.n={trials_b}")
             
             result = self.backend.proportion_z_test(
                 successes_a=successes_a,
@@ -309,23 +276,37 @@ class ABTest:
             except Exception:
                 pass
         elif metric_type == "mean":
-            # Continuous test
+            a = metric_stats[variant_a]
+            b = metric_stats[variant_b]
+            required = ("mean", "std", "n")
+            if any(k not in a for k in required) or any(k not in b for k in required):
+                raise ValueError(
+                    f"Mean metric '{metric_name}' must return per-variant {{'mean','std','n'}}. "
+                    f"Got A={a} B={b}"
+                )
+            mean_a = float(a["mean"])
+            std_a = float(a["std"])
+            n_a = int(a["n"])
+            mean_b = float(b["mean"])
+            std_b = float(b["std"])
+            n_b = int(b["n"])
+            if n_a <= 1 or n_b <= 1:
+                raise ValueError(f"Invalid n for mean metric '{metric_name}': A.n={n_a}, B.n={n_b}")
+
             result = self.backend.mean_t_test(
-                values_a=data_a,
-                values_b=data_b,
-                alpha=self.alpha
+                mean_a=mean_a,
+                std_a=std_a,
+                n_a=n_a,
+                mean_b=mean_b,
+                std_b=std_b,
+                n_b=n_b,
+                alpha=self.alpha,
             )
             result['metric_type'] = 'continuous'
             result['control_value'] = result['control_mean']
             result['treatment_value'] = result['treatment_mean']
-            # Fallback per-group sample std if backend doesn't provide
-            try:
-                std_a = float(np.std(data_a, ddof=1)) if len(data_a) > 1 else float('nan')
-                std_b = float(np.std(data_b, ddof=1)) if len(data_b) > 1 else float('nan')
-                result.setdefault('std_control', std_a)
-                result.setdefault('std_treatment', std_b)
-            except Exception:
-                pass
+            result.setdefault('std_control', std_a)
+            result.setdefault('std_treatment', std_b)
         else:
             raise ValueError(f"Unknown metric_type '{metric_type}' for metric '{metric_name}'")
         
@@ -334,8 +315,12 @@ class ABTest:
         result['variant_control'] = variant_a
         result['variant_treatment'] = variant_b
         result['significant'] = result['p_value'] < self.alpha
-        result['sample_size_control'] = len(data_a)
-        result['sample_size_treatment'] = len(data_b)
+        if metric_type == "proportion":
+            result['sample_size_control'] = trials_a
+            result['sample_size_treatment'] = trials_b
+        else:
+            result['sample_size_control'] = n_a
+            result['sample_size_treatment'] = n_b
         # Attach soft monitoring metadata from registry for summary purposes
         try:
             reg = self._metrics.get(metric_name, {})
@@ -349,13 +334,18 @@ class ABTest:
 
     def analyze(
         self,
+        data: Any,
         metrics: Optional[List[str]] = None,
         correction: Optional[str] = None,
-        run_srm_check: bool = True
+        run_srm_check: bool = True,
+        observed_counts: Optional[Dict[str, int]] = None,
     ) -> 'ExperimentResults':
         """Analyze experiment metrics.
         
         Args:
+            data: Arbitrary data object representing the analysis snapshot
+                (e.g., a DataFrame for a given day). The core does not inspect
+                its schema; it is passed verbatim into metric functions.
             metrics: Optional list of metric names to analyze (a subset of the
                 registered metrics). Defaults to all registered metrics.
                 All provided names must already be registered.
@@ -364,14 +354,14 @@ class ABTest:
                 or ``"fdr"``). This is only applied when analyzing more than one
                 metric; otherwise it is ignored (keep it None).
             run_srm_check: Whether to run SRM check (default True)
+            observed_counts: Optional mapping ``{variant: exposed_units}`` used
+                for SRM. When ``run_srm_check=True``, this must be provided.
         
         Returns:
             ExperimentResults object with all analysis results.
         """
-        # Determine variants: use configured variants only (validated in __init__)
-        if not self.variants or len(self.variants) != 2:
-            raise ValueError("ABTest.variants must contain exactly 2 variant labels")
         variant_a, variant_b = self.variants
+
         
         # Determine metrics: default to all registered metrics
         if metrics is None:
@@ -389,9 +379,12 @@ class ABTest:
         # Run SRM check
         srm_result = None
         if run_srm_check:
-            counts = self.data.groupby(self.variant_col)[self.unit_id].nunique().to_dict()
-            # Filter to only the variants we're testing
-            counts_filtered = {k: v for k, v in counts.items() if k in [variant_a, variant_b]}
+            if observed_counts is None:
+                raise ValueError(
+                    "run_srm_check=True requires observed_counts to be provided "
+                    "(core does not inspect raw data to compute it)."
+                )
+            counts_filtered = {k: int(v) for k, v in observed_counts.items() if k in [variant_a, variant_b]}
             checker = QualityChecker()
             
             # Build expected_ratio dict based on treatment_fraction if provided
@@ -410,7 +403,7 @@ class ABTest:
         metric_results: Dict[str, Dict[str, Any]] = {}
         for metric_name in metrics:
             try:
-                result = self._test_metric(metric_name, variant_a, variant_b)
+                result = self._test_metric(metric_name, variant_a, variant_b, data)
                 metric_results[metric_name] = result
             except Exception as e:
                 traceback.print_exc()
@@ -610,8 +603,10 @@ class ExperimentResults:
             'metrics': self.metric_results
         }
     
-    def to_dataframe(self) -> pd.DataFrame:
+    def to_dataframe(self) -> 'pd.DataFrame':
         """Export as DataFrame."""
+        import pandas as pd
+
         rows = []
         for metric_name, result in self.metric_results.items():
             if 'error' not in result:

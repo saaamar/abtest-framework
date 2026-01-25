@@ -129,16 +129,14 @@ class ExperimentConfig:
     Example:
         >>> config = ExperimentConfig(
         ...     name="pricing_test_v2",
-        ...     variant_col="variant",
-        ...     unit_id="user_id",
+        ...     variants=["A", "B"],
         ...     alpha=0.05,
         ...     correction="holm"
         ... )
         >>> test = ABTest.from_config(data=df, config=config)
     """
     name: str
-    variant_col: str = "variant"
-    unit_id: str = "user_id"
+    variants: list[str] = field(default_factory=lambda: ["A", "B"])
     alpha: float = 0.05
     correction: Optional[str] = None  # "bonferroni", "holm", "bh", None
     backend: Optional[str] = None     # "owl", "scipy", "abexp", None (auto-detect)
@@ -151,8 +149,7 @@ class ExperimentConfig:
         """Convert config to dictionary for serialization."""
         return {
             'name': self.name,
-            'variant_col': self.variant_col,
-            'unit_id': self.unit_id,
+          'variants': self.variants,
             'alpha': self.alpha,
             'correction': self.correction,
             'backend': self.backend,

@@ -5,6 +5,7 @@ import numpy as np
 from abexp.core.analysis_frequentist import FrequentistAnalyzer
 from abexp.core.design import SampleSize
 from .base import StatisticalBackend
+from scipy import stats
 
 
 class AbexpBackend(StatisticalBackend):
@@ -77,56 +78,72 @@ class AbexpBackend(StatisticalBackend):
     
     def mean_t_test(
         self,
-        values_a: np.ndarray,
-        values_b: np.ndarray,
+        mean_a: float,
+        std_a: float,
+        n_a: int,
+        mean_b: float,
+        std_b: float,
+        n_b: int,
         alpha: float = 0.05
     ) -> Dict[str, Any]:
         """Test difference in means using abexp.
         
         Args:
-            values_a: Array of values from control group
-            values_b: Array of values from treatment group
+            mean_a: Control mean
+            std_a: Control sample standard deviation
+            n_a: Control sample size
+            mean_b: Treatment mean
+            std_b: Treatment sample standard deviation
+            n_b: Treatment sample size
             alpha: Significance level (default 0.05)
         
         Returns:
             Dictionary with test results
         """
-        # Call abexp's compare_mean_obs
-        # Returns: (p_value, ci_control, ci_treatment)
-        p_value, ci_control, ci_treatment = self.analyzer.compare_mean_obs(
-            values_a, values_b, alpha=alpha
-        )
-        
-        # Calculate statistics
-        mean_a = float(np.mean(values_a))
-        mean_b = float(np.mean(values_b))
-        std_a = float(np.std(values_a, ddof=1))
-        std_b = float(np.std(values_b, ddof=1))
+        # abexp's mean comparison helper operates on raw observations.
+        # For schema-agnostic workflows, use a Welch-style test from summary stats.
+        mean_a = float(mean_a)
+        mean_b = float(mean_b)
+        std_a = float(std_a)
+        std_b = float(std_b)
+        n_a = int(n_a)
+        n_b = int(n_b)
+        if n_a <= 1 or n_b <= 1:
+            raise ValueError(f"Need n_a>1 and n_b>1, got n_a={n_a}, n_b={n_b}")
+
         mean_diff = mean_b - mean_a
-        
-        # Calculate relative lift (handle zero baseline gracefully)
+        se_diff = np.sqrt((std_a ** 2 / n_a) + (std_b ** 2 / n_b))
+        if se_diff <= 0:
+            raise ValueError("Standard error must be positive")
+
+        t_stat = mean_diff / se_diff
+        df = ((std_a ** 2 / n_a) + (std_b ** 2 / n_b)) ** 2 / (
+            (std_a ** 2 / n_a) ** 2 / (n_a - 1) + (std_b ** 2 / n_b) ** 2 / (n_b - 1)
+        )
+        p_value = 2 * (1 - stats.t.cdf(abs(t_stat), df))
+
+        t_critical = stats.t.ppf(1 - alpha / 2, df)
+        ci_lower = mean_diff - t_critical * se_diff
+        ci_upper = mean_diff + t_critical * se_diff
+
         if mean_a != 0:
             lift = (mean_b - mean_a) / abs(mean_a)
         else:
             lift = 0.0
-        
-        # Calculate CI for the difference
-        ci_lower = ci_treatment[0] - ci_control[1]
-        ci_upper = ci_treatment[1] - ci_control[0]
         
         return {
             'p_value': p_value,
             'ci_lower': ci_lower,
             'ci_upper': ci_upper,
             'lift': lift,
-            'statistic': None,  # abexp doesn't return test statistic directly
+            'statistic': t_stat,
             'mean_diff': mean_diff,
             'control_mean': mean_a,
             'treatment_mean': mean_b,
             'control_std': std_a,
             'treatment_std': std_b,
-            'control_n': len(values_a),
-            'treatment_n': len(values_b),
+            'control_n': n_a,
+            'treatment_n': n_b,
             'backend': 'abexp'
         }
     

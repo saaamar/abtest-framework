@@ -54,7 +54,11 @@ A complete A/B testing framework with the following components:
 ```python
 @test.metric(metric_type="proportion")
 def conversion_rate(data):
-    return data.groupby('user_id')['converted'].max()
+    user_level = data.groupby(["variant", "user_id"])["converted"].max()
+    return {
+        "A": {"successes": int(user_level.loc["A"].sum()), "n": int(user_level.loc["A"].shape[0])},
+        "B": {"successes": int(user_level.loc["B"].sum()), "n": int(user_level.loc["B"].shape[0])},
+    }
 ```
 
 **Why it matters:** Makes custom metric definition intuitive and Pythonic, solving the "rigid metric definition" problem identified in existing packages.
@@ -213,20 +217,32 @@ import pandas as pd
 df = pd.read_csv('experiment.csv')
 
 # Create test
-test = ABTest(name="checkout_redesign", data=df)
+test = ABTest(name="checkout_redesign", variants=["A", "B"])
+observed_counts = df.groupby("variant")["user_id"].nunique().to_dict()
 
 # Define metrics with simple decorators
 @test.metric(metric_type="proportion")
 def conversion_rate(data):
-    return data.groupby('user_id')['purchased'].max()
+    user_level = data.groupby(["variant", "user_id"])["purchased"].max()
+    return {
+        "A": {"successes": int(user_level.loc["A"].sum()), "n": int(user_level.loc["A"].shape[0])},
+        "B": {"successes": int(user_level.loc["B"].sum()), "n": int(user_level.loc["B"].shape[0])},
+    }
 
 @test.metric(metric_type="mean")
 def revenue_per_user(data):
-    return data.groupby('user_id')['revenue'].sum()
+    user_level = data.groupby(["variant", "user_id"])["revenue"].sum()
+    return {
+        "A": {"mean": float(user_level.loc["A"].mean()), "std": float(user_level.loc["A"].std(ddof=1)), "n": int(user_level.loc["A"].shape[0])},
+        "B": {"mean": float(user_level.loc["B"].mean()), "std": float(user_level.loc["B"].std(ddof=1)), "n": int(user_level.loc["B"].shape[0])},
+    }
 
 # Analyze with automatic corrections
 results = test.analyze(
+    df,
     metrics=['conversion_rate', 'revenue_per_user'],
+    run_srm_check=True,
+    observed_counts=observed_counts,
     correction='bonferroni'
 )
 

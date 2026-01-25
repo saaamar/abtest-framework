@@ -21,52 +21,33 @@ class ABTest:
     def __init__(
         self,
         name: str,
-        data: pd.DataFrame,
-        variant_col: str = "variant",
-        unit_id: str = "user_id",
         backend: Optional[StatisticalBackend] = None,
-        alpha: float = 0.05,
         variants: Optional[List[str]] = None,
     ):
         self.name = name
-        self.data = data.copy()
-        self.variant_col = variant_col
-        self.unit_id = unit_id
         self.backend = backend if backend is not None else AbexpBackend()
-        self.alpha = alpha
-        self.timestamp = datetime.now().isoformat()
+        self.alpha = 0.05
+        self.timestamp = None
 
         # Explicit variants configuration (e.g. ["A", "B"])
-        self.variants: Optional[List[str]] = variants
+        self.variants: List[str] = list(variants) if variants is not None else ["A", "B"]
 
         # Metric registry: name -> metadata dict
         self._metrics: Dict[str, Dict[str, Any]] = {}
 
-        self._validate_data()
+        if len(self.variants) != 2:
+            raise ValueError("'variants' must contain exactly 2 labels")
 ```
 
 Validation:
 
 ```python
-def _validate_data(self):
-    if self.variant_col not in self.data.columns:
-        raise ValueError(...)
-    if self.unit_id not in self.data.columns:
-        raise ValueError(...)
-
-    data_variants = sorted(self.data[self.variant_col].unique())
-    if len(data_variants) < 2:
-        raise ValueError(...)
-
-    if self.variants is not None:
-        if len(self.variants) != 2:
-            raise ValueError(...)
-        missing = [v for v in self.variants if v not in data_variants]
-        if missing:
-            raise ValueError(...)
-    else:
-        # Default: first 2 variants in sorted order
-        self.variants = data_variants[:2]
+def analyze(self, data: pd.DataFrame, *, run_srm_check: bool = True, observed_counts: Optional[Dict[str, int]] = None, ...):
+    # Data validation happens at analysis time.
+    # The core does NOT inspect the DataFrame schema to infer units/variants;
+    # metric functions compute per-variant sufficient statistics.
+    # If SRM is enabled, observed_counts must be provided explicitly.
+    ...
 ```
 
 **Outcome:**  
@@ -117,7 +98,11 @@ Programmatic registration (without using `@` syntax):
 
 ```python
 def my_metric(data):
-    return data.groupby('user_id')['value'].sum()
+    user_level = data.groupby(["variant", "user_id"])["value"].sum()
+    return {
+        "A": {"mean": float(user_level.loc["A"].mean()), "std": float(user_level.loc["A"].std(ddof=1)), "n": int(user_level.loc["A"].shape[0])},
+        "B": {"mean": float(user_level.loc["B"].mean()), "std": float(user_level.loc["B"].std(ddof=1)), "n": int(user_level.loc["B"].shape[0])},
+    }
 
 test.metric(metric_type="mean")(my_metric)
 ```
@@ -127,7 +112,11 @@ Primary metric selection is done at registration time:
 ```python
 @test.metric(metric_type="proportion", is_primary=True)
 def conversion_rate(data):
-    return data.groupby("user_id")["converted"].max()
+    user_level = data.groupby(["variant", "user_id"])["converted"].max()
+    return {
+        "A": {"successes": int(user_level.loc["A"].sum()), "n": int(user_level.loc["A"].shape[0])},
+        "B": {"successes": int(user_level.loc["B"].sum()), "n": int(user_level.loc["B"].shape[0])},
+    }
 ```
 
 **Key behavior now:**
@@ -476,20 +465,18 @@ The current `monitor_alpha`, `monitor_power`, `inferiority_margin` fields were a
 ```python
 from ab_framework.core import ABTest
 
-test = ABTest(
-    name="agent_sessions_quality_vs_resolution_AB",
-    data=df,
-    variant_col="variant",
-    unit_id="user_id",
-    variants=["A", "B"],
-)
+test = ABTest(name="agent_sessions_quality_vs_resolution_AB", variants=["A", "B"])
+
+observed_counts = df.groupby("variant")["user_id"].nunique().to_dict()
 
 @test.metric(
     metric_type="proportion",
     is_primary=True,
 )
 def quality_rate(data):
-    return data.groupby("user_id")["quality"].max()
+    user_level = data.groupby(["variant", "user_id"])["quality"].max()
+    summary = user_level.groupby("variant").agg(["sum", "count"]).to_dict("index")
+    return {v: {"successes": int(d["sum"]), "n": int(d["count"])} for v, d in summary.items()}
 
 @test.metric(
     metric_type="proportion",
@@ -499,9 +486,11 @@ def quality_rate(data):
     inferiority_margin=-0.01,
 )
 def resolved_rate(data):
-    return data.groupby("user_id")["resolved"].max()
+    user_level = data.groupby(["variant", "user_id"])["resolved"].max()
+    summary = user_level.groupby("variant").agg(["sum", "count"]).to_dict("index")
+    return {v: {"successes": int(d["sum"]), "n": int(d["count"])} for v, d in summary.items()}
 
-results = test.analyze(run_srm_check=True)
+results = test.analyze(df, run_srm_check=True, observed_counts=observed_counts)
 
 print(results.summary())
 print(results.decision_soft_monitoring())

@@ -61,28 +61,34 @@ class OwlBackend(StatisticalBackend):
     
     def mean_t_test(
         self,
-        values_a: np.ndarray,
-        values_b: np.ndarray,
+        mean_a: float,
+        std_a: float,
+        n_a: int,
+        mean_b: float,
+        std_b: float,
+        n_b: int,
         alpha: float = 0.05
     ) -> Dict[str, Any]:
         """Test difference in means using owl_ab_test.
         
         Args:
-            values_a: Array of values from control group
-            values_b: Array of values from treatment group
+            mean_a: Control mean
+            std_a: Control sample standard deviation
+            n_a: Control sample size
+            mean_b: Treatment mean
+            std_b: Treatment sample standard deviation
+            n_b: Treatment sample size
             alpha: Significance level (default 0.05)
         
         Returns:
             Dictionary with test results
         """
-        # Pre-compute statistics required by owl_ab_test
-        mean_a = float(np.mean(values_a))
-        std_a = float(np.std(values_a, ddof=1))
-        n_a = len(values_a)
-        
-        mean_b = float(np.mean(values_b))
-        std_b = float(np.std(values_b, ddof=1))
-        n_b = len(values_b)
+        mean_a = float(mean_a)
+        std_a = float(std_a)
+        n_a = int(n_a)
+        mean_b = float(mean_b)
+        std_b = float(std_b)
+        n_b = int(n_b)
         
         # Call owl_ab_test function
         result = calculate_revenue_stats(

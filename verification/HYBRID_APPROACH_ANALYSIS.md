@@ -878,23 +878,34 @@ from ab_framework.backends import OwlBackend  # Or ScipyBackend
 
 test = ABTest(
     name="homepage_redesign",
-    data=df,
-    variant_col="variant",
-    unit_id="user_id",
-    backend=OwlBackend()  # Pluggable!
+    variants=["A", "B"],
+    backend=OwlBackend(),  # Pluggable!
 )
+
+observed_counts = df.groupby("variant")["user_id"].nunique().to_dict()
 
 @test.metric(metric_type="proportion")
 def conversion_rate(data):
-    return data.groupby('user_id')['converted'].max()
+    user_level = data.groupby(["variant", "user_id"])["converted"].max()
+    return {
+        "A": {"successes": int(user_level.loc["A"].sum()), "n": int(user_level.loc["A"].shape[0])},
+        "B": {"successes": int(user_level.loc["B"].sum()), "n": int(user_level.loc["B"].shape[0])},
+    }
 
 @test.metric(metric_type="mean")
 def revenue_per_user(data):
-    return data.groupby('user_id')['revenue'].sum()
+    user_level = data.groupby(["variant", "user_id"])["revenue"].sum()
+    return {
+        "A": {"mean": float(user_level.loc["A"].mean()), "std": float(user_level.loc["A"].std(ddof=1)), "n": int(user_level.loc["A"].shape[0])},
+        "B": {"mean": float(user_level.loc["B"].mean()), "std": float(user_level.loc["B"].std(ddof=1)), "n": int(user_level.loc["B"].shape[0])},
+    }
 
 # Multi-metric with automatic Bonferroni
 results = test.analyze(
+    df,
     metrics=['conversion_rate', 'revenue_per_user'],
+    run_srm_check=True,
+    observed_counts=observed_counts,
     correction='bonferroni'
 )
 
@@ -994,7 +1005,8 @@ Savings: -80 to -100 LOC (statistical layer replaced by thinner adapter)
 # Start with owl as primary backend
 from ab_framework.backends import OwlBackend
 
-test = ABTest(name="my_experiment", data=df, backend=OwlBackend())
+test = ABTest(name="my_experiment", variants=["A", "B"], backend=OwlBackend())
+
 ```
 
 **If owl fails or becomes unmaintained:**
@@ -1005,7 +1017,7 @@ test = ABTest(name="my_experiment", data=df, backend=OwlBackend())
 # One-line change to switch backend
 from ab_framework.backends import ScipyBackend
 
-test = ABTest(name="my_experiment", data=df, backend=ScipyBackend())
+test = ABTest(name="my_experiment", variants=["A", "B"], backend=ScipyBackend())
 ```
 
 **User code unchanged!** This is the power of the adapter pattern.

@@ -22,19 +22,27 @@ df = pd.read_csv(data_path)
 # Create test at impression level
 test = ABTest(
     name="ad_creative_test",
-    data=df,
-    unit_id="impression_id",  # Event-level analysis
-    variant_col="variant"
+    variants=["A", "B"],
 )
 
 # Define metric
 @test.metric(metric_type="proportion")
 def click_through_rate(data):
     """CTR at impression level."""
-    return data.set_index('impression_id')['clicked']
+    out = {}
+    for variant in ["A", "B"]:
+        v = data.loc[data["variant"] == variant, "clicked"]
+        out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+    return out
 
 # Analyze
-results = test.analyze(['click_through_rate'])
+observed_counts = df.groupby("variant")["impression_id"].nunique().to_dict()
+results = test.analyze(
+    df,
+    metrics=["click_through_rate"],
+    run_srm_check=True,
+    observed_counts=observed_counts,
+)
 
 # Print summary
 print(results.summary())

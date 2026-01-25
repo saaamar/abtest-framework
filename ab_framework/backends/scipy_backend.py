@@ -74,48 +74,52 @@ class ScipyBackend(StatisticalBackend):
     
     def mean_t_test(
         self,
-        values_a: np.ndarray,
-        values_b: np.ndarray,
+        mean_a: float,
+        std_a: float,
+        n_a: int,
+        mean_b: float,
+        std_b: float,
+        n_b: int,
         alpha: float = 0.05
     ) -> Dict[str, Any]:
         """Test difference in means using two-sample t-test.
         
         Args:
-            values_a: Array of values from control group
-            values_b: Array of values from treatment group
+            mean_a: Control mean
+            std_a: Control sample standard deviation
+            n_a: Control sample size
+            mean_b: Treatment mean
+            std_b: Treatment sample standard deviation
+            n_b: Treatment sample size
             alpha: Significance level (default 0.05)
         
         Returns:
             Dictionary with test results
         """
-        # Perform two-sample t-test (assumes unequal variances - Welch's t-test)
-        t_stat, p_value = stats.ttest_ind(values_b, values_a, equal_var=False)
-        
-        # Calculate descriptive statistics
-        mean_a = np.mean(values_a)
-        mean_b = np.mean(values_b)
-        std_a = np.std(values_a, ddof=1)
-        std_b = np.std(values_b, ddof=1)
-        n_a = len(values_a)
-        n_b = len(values_b)
-        
-        # Mean difference
+        mean_a = float(mean_a)
+        mean_b = float(mean_b)
+        std_a = float(std_a)
+        std_b = float(std_b)
+        n_a = int(n_a)
+        n_b = int(n_b)
+        if n_a <= 1 or n_b <= 1:
+            raise ValueError(f"Need n_a>1 and n_b>1, got n_a={n_a}, n_b={n_b}")
+
         mean_diff = mean_b - mean_a
-        
-        # Standard error for difference in means (Welch's method)
-        se_diff = np.sqrt((std_a**2 / n_a) + (std_b**2 / n_b))
-        
-        # Degrees of freedom (Welch-Satterthwaite equation)
-        df = ((std_a**2 / n_a) + (std_b**2 / n_b))**2 / (
-            (std_a**2 / n_a)**2 / (n_a - 1) + (std_b**2 / n_b)**2 / (n_b - 1)
+        se_diff = np.sqrt((std_a ** 2 / n_a) + (std_b ** 2 / n_b))
+        if se_diff <= 0:
+            raise ValueError("Standard error must be positive")
+
+        t_stat = mean_diff / se_diff
+        df = ((std_a ** 2 / n_a) + (std_b ** 2 / n_b)) ** 2 / (
+            (std_a ** 2 / n_a) ** 2 / (n_a - 1) + (std_b ** 2 / n_b) ** 2 / (n_b - 1)
         )
-        
-        # Confidence interval for difference
-        t_critical = stats.t.ppf(1 - alpha/2, df)
+        p_value = 2 * (1 - stats.t.cdf(abs(t_stat), df))
+
+        t_critical = stats.t.ppf(1 - alpha / 2, df)
         ci_lower = mean_diff - t_critical * se_diff
         ci_upper = mean_diff + t_critical * se_diff
-        
-        # Relative lift
+
         lift = mean_diff / mean_a if mean_a != 0 else 0.0
         
         return {

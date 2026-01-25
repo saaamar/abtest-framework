@@ -24,56 +24,50 @@ This document combines:
 **Test Environment:**
 - 8 comprehensive scenarios (conversion, revenue, CTR, multi-metric, agent bot metrics)
 - Event-level data structure (sessions/impressions)
-- All packages tested against scipy ground truth
-- Random seed 42 (reproducible)
+import pandas as pd
 
-**Summary Results:**
+from ab_framework import ABTest
 
-| Package | S1 | S2 | S3 | S4 | S5 | S6 | S7 | S8 | Success Rate |
-|---------|----|----|----|----|----|----|----|----|--------------|
-| **scipy+pandas** | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅ | ✅ | **8/8 (100%)** |
-| **abexp** | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | **7/8 (87.5%)** |
-| **owl_ab_test** | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | **7/8 (87.5%)** |
+df = pd.read_csv("sessions.csv")
 
-**Legend:**
-- ✅ Works correctly, matches ground truth
-- ⚠️ Works but requires manual implementation
-- ❌ Does not support scenario
+test = ABTest(name="homepage_redesign", variants=["A", "B"])
+observed_counts = df.groupby("variant")["user_id"].nunique().to_dict()
 
-**Key Findings:**
-- ✅ All packages work correctly with event-level data structure
-- ✅ Statistical accuracy: P-values match ground truth within 0.01 tolerance
-- ❌ **Critical Gap:** No package supports multi-metric dashboards with Bonferroni correction
-- ⚠️ Code reduction: ~60% for simple cases, but orchestration still needed
-- ✅ **Validation:** Event-level data structure is industry standard and scientifically correct
+@test.metric(metric_type="mean")
+def revenue_per_active_user(data):
+    active = data[data["sessions"] > 0]
+    user_rev = active.groupby(["variant", "user_id"])["revenue"].sum()
 
-**Key Finding:** A custom orchestration framework built on `scipy`/`pandas` (and other backends such as `owl_ab_test`) is warranted; we are not replacing these engines, but standardizing how we use them.
+    stats = (
+        user_rev.groupby("variant")
+        .agg(["mean", "std", "count"])
+        .rename(columns={"count": "n"})
+        .fillna({"std": 0.0})
+    )
+    return {
+        v: {"mean": float(r["mean"]), "std": float(r["std"]) if int(r["n"]) > 1 else 0.0, "n": int(r["n"]) }
+        for v, r in stats.iterrows()
+    }
 
----
+@test.metric(metric_type="proportion")
+def conversion_rate(data):
+    user_conv = data.groupby(["variant", "user_id"])["converted"].max()
+    stats = (
+        user_conv.groupby("variant")
+        .agg(["sum", "count"])
+        .rename(columns={"sum": "successes", "count": "n"})
+    )
+    return {v: {"successes": int(r["successes"]), "n": int(r["n"])} for v, r in stats.iterrows()}
 
-## 📊 Scientific Verification Results (8 Scenarios)
+results = test.analyze(
+    df,
+    metrics=["revenue_per_active_user", "conversion_rate"],
+    correction="bonferroni",
+    run_srm_check=True,
+    observed_counts=observed_counts,
+)
 
-### Verification Methodology
-
-**Data Generation:**
-Synthetic datasets were generated for 8 scenarios using controlled effect sizes with reproducible random seed (42).
-
-**Ground Truth Computation:**
-- **Binary metrics (S1, S5, S6):** Two-proportion z-test
-- **Continuous metrics (S2, S7, S8):** Welch's t-test (unequal variances)
-- **Rate metrics (S3):** Two-proportion z-test on impression-level data
-- **Multi-metric (S4):** Individual tests + Bonferroni correction (α/3)
-
-All confidence intervals computed at 95% level using appropriate standard errors.
-
-**Test Protocol:**
-Each package implementation was required to:
-1. Load and process the scenario data correctly
-2. Apply the appropriate statistical test
-3. Return p-values matching ground truth within tolerance (ε = 0.01)
-4. Handle edge cases (zero values, aggregations, etc.)
-
-### Data Generation Summary
+print(results.summary())
 
 | Scenario | Data Structure | Metric Type | Sample Size | True Effect |
 |----------|---------------|-------------|-------------|-------------|
@@ -618,11 +612,22 @@ t_stat, p_val = stats.ttest_ind(revenue_a, revenue_b)
 
 # Desired (framework): 5-10 LOC per metric
 @experiment.metric(metric_type="mean")
-def revenue_per_active_user(df):
-    active = df[df['sessions'] > 0]
-    return active.groupby('user_id')['revenue'].sum()
+def revenue_per_active_user(data):
+  active = data[data["sessions"] > 0]
+  user_rev = active.groupby(["variant", "user_id"])["revenue"].sum()
+  stats = (
+    user_rev.groupby("variant")
+    .agg(["mean", "std", "count"])
+    .rename(columns={"count": "n"})
+    .fillna({"std": 0.0})
+  )
+  return {
+    v: {"mean": float(r["mean"]), "std": float(r["std"]) if int(r["n"]) > 1 else 0.0, "n": int(r["n"]) }
+    for v, r in stats.iterrows()
+  }
 
-results = experiment.analyze([revenue_per_active_user])
+observed_counts = df.groupby("variant")["user_id"].nunique().to_dict()
+results = experiment.analyze(df, metrics=["revenue_per_active_user"], run_srm_check=True, observed_counts=observed_counts)
 ```
 
 **2. Automatic Statistical Pipeline**
@@ -674,54 +679,9 @@ results = experiment.analyze([revenue_per_active_user])
 
 **Answer: We ARE using packages:**
 
-```python
-# What we're NOT building (use existing):
-✅ scipy.stats.ttest_ind        # Statistical tests
-✅ scipy.stats.norm             # Distributions
-✅ pandas.DataFrame             # Data manipulation
-✅ numpy                        # Numerical operations
-
-# What we ARE building (doesn't exist):
-🔨 Metric registration API
-🔨 Automatic test pipeline
-🔨 SRM checks
-🔨 Multi-metric orchestration
-🔨 Standardized reporting
-```
-
-**Analogy:**
-- **scipy/pandas** = Engine and transmission
-- **Our framework** = The car body, steering wheel, dashboard
-- We're not building an engine, we're building a car around an engine
-
-### Concern: "Maintenance burden of custom code?"
-
-**Answer:** The main risk is not that third‑party packages are “broken”, but that they **do not cover the full feature set** we need. All three options (abexp, owl_ab_test, custom framework) ultimately sit on top of the same stable numerical stack (scipy, pandas, numpy).
-
-**Maintenance Risk Comparison (updated):**
-
-| Aspect | Custom Framework | Third-Party Packages (abexp, owl, py-ab-testing) |
-|--------|------------------|---------------------------------------------------|
-| **Dependency risk** | ✅ Directly depend only on scipy/pandas/numpy | ✅ Also depend on scipy/pandas/numpy, plus extra package APIs |
-| **Breaking changes** | ✅ We control the public API and migration path | ❌ External maintainers may change or freeze APIs |
-| **Bug fixes** | ✅ Can be fixed internally on our timeline | ❌ Must wait for upstream releases (if active) |
-| **Feature additions** | ✅ Add orchestration, SRM, multi-metric as needed | ❌ Request upstream or fork/extend locally anyway |
-| **Python version compatibility** | ✅ We choose supported versions and test against them | ⚠️ Must track both core stack and each package’s support matrix |
-| **Understanding the code** | ✅ Fully transparent – written and owned in-house | ⚠️ Need to reverse‑engineer behavior or read external source/docs |
-
-**Summary:** From a maintenance perspective, the custom framework is a **thin, owned layer** over stable libraries, while abexp/owl add another dependency surface without solving orchestration, SRM, or multi‑metric requirements.
-
----
-
-## Proposed Architecture
-
-### Design Principles:
-
-1. **Orchestration, Not Statistics** - Use scipy for stats, add coordination layer
-2. **Flexibility First** - Support any metric as a Python function
-3. **Sensible Defaults** - Clear API with explicit metric types
-4. **Fail Safely** - Validate inputs, provide clear error messages
-5. **Composable** - Each component works independently
+- Statistical tests: `scipy.stats` (e.g., Welch t-test, z-tests)
+- Data manipulation: `pandas` for filtering + user-level aggregation
+- The framework layer: orchestration + SRM checks + reporting (it doesn’t replace the stats engines)
 
 ### Architecture Layers:
 
@@ -769,35 +729,47 @@ results = experiment.analyze([revenue_per_active_user])
 ### Example API:
 
 ```python
+import pandas as pd
+
 from ab_framework import ABTest
 
-# Initialize experiment
-test = ABTest(
-    name="homepage_redesign",
-    data=df,  # pandas DataFrame
-    variant_col="variant",
-    unit_id="user_id"
-)
+df = pd.read_csv("sessions.csv")
 
-# Define custom metrics (user-written functions)
+test = ABTest(name="homepage_redesign", variants=["A", "B"])
+observed_counts = df.groupby("variant")["user_id"].nunique().to_dict()
+
 @test.metric(metric_type="mean")
 def revenue_per_active_user(data):
-    """Custom metric: revenue among users with sessions > 0"""
-    active = data[data['sessions'] > 0]
-    return active.groupby('user_id')['revenue'].sum()
+    active = data[data["sessions"] > 0]
+    user_rev = active.groupby(["variant", "user_id"])["revenue"].sum()
 
-# Binary metrics must be registered explicitly
+    stats = (
+        user_rev.groupby("variant")
+        .agg(["mean", "std", "count"])
+        .rename(columns={"count": "n"})
+        .fillna({"std": 0.0})
+    )
+    return {
+        v: {"mean": float(r["mean"]), "std": float(r["std"]) if int(r["n"]) > 1 else 0.0, "n": int(r["n"]) }
+        for v, r in stats.iterrows()
+    }
+
 @test.metric(metric_type="proportion")
 def conversion_rate(data):
-    """Simple binary metric"""
-    return data['converted'].mean()
+    user_conv = data.groupby(["variant", "user_id"])["converted"].max()
+    stats = (
+        user_conv.groupby("variant")
+        .agg(["sum", "count"])
+        .rename(columns={"sum": "successes", "count": "n"})
+    )
+    return {v: {"successes": int(r["successes"]), "n": int(r["n"])} for v, r in stats.iterrows()}
 
-# Run analysis (on-demand)
 results = test.analyze(
-    metrics=['revenue_per_active_user', 'conversion_rate'],
-    variants=['control', 'treatment'],
-    alpha=0.05,
-    correction='bonferroni'  # for multiple metrics
+    df,
+    metrics=["revenue_per_active_user", "conversion_rate"],
+    correction="bonferroni",
+    run_srm_check=True,
+    observed_counts=observed_counts,
 )
 
 # Access results
@@ -809,40 +781,27 @@ results.export('experiment_results.json')
 
 ### Output Structure:
 
-```python
+```json
 {
-    'experiment': 'homepage_redesign',
-    'timestamp': '2025-11-23T09:51:00Z',
-    'metrics': {
-        'revenue_per_active_user': {
-            'control': {'n': 265, 'mean': 48.82, 'std': 19.8},
-            'treatment': {'n': 340, 'mean': 58.33, 'std': 20.1},
-            'test': {
-                'type': 'welch_ttest',
-                'statistic': -5.53,
-                'p_value': 0.0000,
-                'significant': True
-            },
-            'effect': {
-                'absolute': 9.51,
-            - **Sample size planning via backend methods** (no standalone calculator class)
-                'cohens_d': 0.476,
-                'ci_95': [6.18, 12.85]
-            }
+    "experiment": "homepage_redesign",
+    "timestamp": "2025-11-23T09:51:00Z",
+    "metrics": {
+        "revenue_per_active_user": {
+            "A": {"n": 265, "mean": 48.82, "std": 19.8},
+            "B": {"n": 340, "mean": 58.33, "std": 20.1},
+            "test": {"type": "welch_ttest", "p_value": 0.0000, "significant": true},
+            "effect": {"absolute": 9.51, "cohens_d": 0.476, "ci_95": [6.18, 12.85]}
         },
-        'conversion_rate': {
-            # Similar structure...
+        "conversion_rate": {
+            "A": {"n": 1000, "successes": 100},
+            "B": {"n": 1000, "successes": 112}
         }
     },
-    'quality_checks': {
-        'srm_check': {'p_value': 0.85, 'passed': True},
-        'sample_sizes': {'control': 1000, 'treatment': 1000}
+    "quality_checks": {
+        "srm_check": {"p_value": 0.85, "passed": true},
+        "sample_sizes": {"A": 1000, "B": 1000}
     },
-    'multiple_testing': {
-        'method': 'bonferroni',
-        'alpha_adjusted': 0.025,
-        'significant_metrics': ['revenue_per_active_user']
-    }
+    "multiple_testing": {"method": "bonferroni", "alpha_adjusted": 0.025}
 }
 ```
 

@@ -296,13 +296,18 @@ Ground Truth: p=0.383397, A=0.1000, B=0.1120
 **1. Consistent Interface (regardless of backend):**
 ```python
 # Same code works whether using owl, scipy, or future packages
-test = ABTest(name="pricing_test", data=df, variant_col="variant", unit_id="user_id")
+test = ABTest(name="pricing_test", variants=["A", "B"])
 
 @test.metric(metric_type="proportion")
 def conversion_rate(data):
-    return data.groupby('user_id')['converted'].max()
+  user_level = data.groupby(["variant", "user_id"])["converted"].max()
+  return {
+    "A": {"successes": int(user_level.loc["A"].sum()), "n": int(user_level.loc["A"].shape[0])},
+    "B": {"successes": int(user_level.loc["B"].sum()), "n": int(user_level.loc["B"].shape[0])},
+  }
 
-results = test.analyze(['conversion_rate'])
+observed_counts = df.groupby("variant")["user_id"].nunique().to_dict()
+results = test.analyze(df, metrics=["conversion_rate"], run_srm_check=True, observed_counts=observed_counts)
 ```
 - Teams learn ONE way to run experiments
 - We can change backends without teams noticing

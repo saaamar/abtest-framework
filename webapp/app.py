@@ -356,16 +356,14 @@ def create_app():
 
                     test = ABTest(
                         name="webapp_agent_quality_vs_resolution",
-                        data=df,
-                        variant_col="variant",
-                        unit_id="user_id",
+                        variants=["A", "B"],
                     )
-                    # Configure analysis parameters after construction so that
-                    # ABTest.__init__ only carries metadata + data. Attach
-                    # analysis alpha and timestamp via setup().
+                    # Configure analysis parameters after construction.
                     # allocation ratio / treatment_fraction is fixed 50:50
                     # by the hashing scheme used in data generation.
                     test.setup(alpha=exp["alpha"], timestamp=today_str)
+
+                    observed_counts = df.groupby("variant")["user_id"].nunique().to_dict()
 
                     # Define metrics like in demo: quality_rate (primary), resolved_rate (monitor)
                     @test.metric(
@@ -375,7 +373,16 @@ def create_app():
                         monitor_power=exp["power"],
                     )
                     def quality_ratio(data):
-                        return data.groupby("user_id")["quality"].max()
+                        user_level = data.groupby(["variant", "user_id"])["quality"].max()
+                        out = {}
+                        for variant in ["A", "B"]:
+                            v = (
+                                user_level.loc[variant]
+                                if variant in user_level.index.get_level_values(0)
+                                else pd.Series(dtype=float)
+                            )
+                            out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+                        return out
 
                     @test.metric(
                         metric_type="proportion",
@@ -384,9 +391,23 @@ def create_app():
                         monitor_power=exp["power"],
                     )
                     def resolved_ratio(data):
-                        return data.groupby("user_id")["resolved"].max()
+                        user_level = data.groupby(["variant", "user_id"])["resolved"].max()
+                        out = {}
+                        for variant in ["A", "B"]:
+                            v = (
+                                user_level.loc[variant]
+                                if variant in user_level.index.get_level_values(0)
+                                else pd.Series(dtype=float)
+                            )
+                            out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+                        return out
 
-                    abtest_results = test.analyze(run_srm_check=True, correction=None)
+                    abtest_results = test.analyze(
+                        df,
+                        run_srm_check=True,
+                        observed_counts=observed_counts,
+                        correction=None,
+                    )
 
                     print(abtest_results.summary())
                     print("\nSOFT MONITORING DECISION:")
@@ -509,22 +530,38 @@ def create_app():
                         
                         test_hist = ABTest(
                             name="webapp_historical",
-                            data=df_hist,
-                            variant_col="variant",
-                            unit_id="user_id",
+                            variants=["A", "B"],
                         )
                         test_hist.setup(alpha=exp["alpha"], timestamp=hist_day.isoformat())
                         
                         @test_hist.metric(metric_type="proportion", is_primary=True)
                         def quality_ratio(data):
-                            return data.groupby("user_id")["quality"].max()
+                            user_level = data.groupby(["variant", "user_id"])["quality"].max()
+                            out = {}
+                            for variant in ["A", "B"]:
+                                v = (
+                                    user_level.loc[variant]
+                                    if variant in user_level.index.get_level_values(0)
+                                    else pd.Series(dtype=float)
+                                )
+                                out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+                            return out
                         
                         @test_hist.metric(metric_type="proportion")
                         def resolved_ratio(data):
-                            return data.groupby("user_id")["resolved"].max()
+                            user_level = data.groupby(["variant", "user_id"])["resolved"].max()
+                            out = {}
+                            for variant in ["A", "B"]:
+                                v = (
+                                    user_level.loc[variant]
+                                    if variant in user_level.index.get_level_values(0)
+                                    else pd.Series(dtype=float)
+                                )
+                                out[variant] = {"successes": int(v.sum()), "n": int(v.shape[0])}
+                            return out
                         
                         try:
-                            results_hist = test_hist.analyze(run_srm_check=False, correction=None)
+                            results_hist = test_hist.analyze(df_hist, run_srm_check=False, correction=None)
                             day_data = {"day": exp_day_idx, "experiment_day": exp_day_idx, "metrics": {}}
                             
                             for m in metrics:

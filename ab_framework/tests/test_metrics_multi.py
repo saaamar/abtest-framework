@@ -66,9 +66,7 @@ def test_multi_metric_bonferroni_synthetic():
 
 	test = ABTest(
 		name="multi_metric_test",
-		data=df,
-		variant_col="variant",
-		unit_id="user_id",
+		variants=["A", "B"],
 	)
 
 	# ------------------------------------------------------------------
@@ -82,27 +80,42 @@ def test_multi_metric_bonferroni_synthetic():
 	@test.metric(metric_type="proportion")
 	def conversion_rate(data):
 		"""User-level conversion (converted in any session)."""
-		return data.groupby("user_id")["converted_this_session"].max()
+		per_user = data.groupby(["variant", "user_id"])["converted_this_session"].max().reset_index()
+		summary = per_user.groupby("variant")["converted_this_session"].agg(["sum", "count"]).to_dict("index")
+		return {
+			v: {"successes": int(d["sum"]), "n": int(d["count"])}
+			for v, d in summary.items()
+		}
 
 	@test.metric(metric_type="mean")
 	def avg_order_value(data):
 		"""AOV among converters only."""
 		converters = data[data["converted_this_session"] == 1]
-		if len(converters) == 0:
-			return pd.Series(dtype=float)
-		return converters.groupby("user_id")["order_value"].mean()
+		user_aov = converters.groupby(["variant", "user_id"])["order_value"].mean().reset_index()
+		summary = user_aov.groupby("variant")["order_value"].agg(["mean", "std", "count"]).to_dict("index")
+		return {
+			v: {"mean": float(d["mean"]), "std": float(d["std"]), "n": int(d["count"])}
+			for v, d in summary.items()
+		}
 
 	@test.metric(metric_type="mean")
 	def revenue_per_user(data):
 		"""Total revenue per user."""
-		return data.groupby("user_id")["order_value"].sum()
+		user_rev = data.groupby(["variant", "user_id"])["order_value"].sum().reset_index()
+		summary = user_rev.groupby("variant")["order_value"].agg(["mean", "std", "count"]).to_dict("index")
+		return {
+			v: {"mean": float(d["mean"]), "std": float(d["std"]), "n": int(d["count"])}
+			for v, d in summary.items()
+		}
 
 	# ------------------------------------------------------------------
 	# Analysis with Bonferroni correction
 	# ------------------------------------------------------------------
 	results = test.analyze(
+		df,
 		metrics=["conversion_rate", "avg_order_value", "revenue_per_user"],
 		correction="bonferroni",
+		run_srm_check=False,
 	)
 	for metric_name in ["conversion_rate", "avg_order_value", "revenue_per_user"]:
 		result = results.metric_results[metric_name]

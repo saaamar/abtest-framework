@@ -256,7 +256,7 @@ results.metric_results = {
         
         # Metadata
         "metric_name": "quality_rate",
-        "metric_type": "proportion",       # "proportion" or "continuous"
+        "metric_type": "binary",           # framework output label: "binary" or "continuous"
         "variant_control": "control",
         "variant_treatment": "treatment",
         "is_primary": True
@@ -288,6 +288,10 @@ results.srm_result = {
 # Get human-readable summary
 summary_text = results.summary()
 print(summary_text)
+
+# Note on dispersion in summaries:
+# - For proportion (binary) metrics, summaries show **SE** (standard error of the estimated rate).
+# - For mean (continuous) metrics, summaries show **Std** (sample standard deviation).
 
 # Get structured data for programmatic use
 structured_data = results.to_dict()

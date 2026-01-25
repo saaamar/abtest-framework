@@ -132,6 +132,65 @@ results = test.analyze(
 print(results.summary())
 ```
 
+## Using Pre-Aggregated Daily Inputs (No Raw Logs)
+
+The framework core is schema-agnostic: it does not require raw event logs as long as your
+metric function can return the required per-variant summary stats.
+
+If your upstream system already produces daily aggregates for a proportion metric, such as:
+
+- `day`
+- `rate_A`, `rate_B` (daily rates)
+- `n_A`, `n_B` (daily denominators)
+
+You can analyze either a single day or a cumulative window by converting rates into integer
+success counts and then returning `{variant: {successes, n}}`.
+
+Best practice: if you can, provide true integer `successes_A` / `successes_B` instead of
+deriving them by rounding `rate * n`.
+
+Note on output formatting: for proportion metrics the framework summary prints **SE** (standard error)
+per variant rather than a raw “Std”, since for Bernoulli outcomes the per-row standard deviation
+($\sqrt{p(1-p)}$) is usually less interpretable than the sampling uncertainty of the estimated rate.
+
+```python
+import pandas as pd
+from ab_framework import ABTest
+
+df_daily = pd.DataFrame({
+    "day": ["2026-01-01", "2026-01-02"],
+    "rate_A": [0.100, 0.098],
+    "rate_B": [0.106, 0.105],
+    "n_A": [10000, 12000],
+    "n_B": [10000, 12000],
+})
+
+# Convert rates to integer successes (prefer true counts if available)
+df_daily["successes_A"] = (df_daily["rate_A"] * df_daily["n_A"]).round().astype(int)
+df_daily["successes_B"] = (df_daily["rate_B"] * df_daily["n_B"]).round().astype(int)
+
+test = ABTest(name="agg_daily_example", variants=["A", "B"])
+
+@test.metric(metric_type="proportion", is_primary=True)
+def conversion_rate_from_daily(data: pd.DataFrame):
+    # Analyze the entire window in `data` (sum across days)
+    return {
+        "A": {"successes": int(data["successes_A"].sum()), "n": int(data["n_A"].sum())},
+        "B": {"successes": int(data["successes_B"].sum()), "n": int(data["n_B"].sum())},
+    }
+
+observed_counts = {"A": int(df_daily["n_A"].sum()), "B": int(df_daily["n_B"].sum())}
+results = test.analyze(
+    df_daily,
+    metrics=["conversion_rate_from_daily"],
+    run_srm_check=True,
+    observed_counts=observed_counts,
+    correction=None,
+)
+
+print(results.summary())
+```
+
 ## Core Concepts
 
 ### 1. Metric Functions

@@ -569,18 +569,35 @@ class ExperimentResults:
                         pass
             lines.append(f"- **Control:** {result['control_value']:.4f} (n={result['sample_size_control']})")
             lines.append(f"- **Treatment:** {result['treatment_value']:.4f} (n={result['sample_size_treatment']})")
-            # Dispersion: prefer per-group stds; fallback to pooled only if both missing
-            sc = result.get('std_control')
-            st = result.get('std_treatment')
-            printed_std = False
-            if sc is not None:
-                lines.append(f"- **Std (control):** {float(sc):.6f}")
-                printed_std = True
-            if st is not None:
-                lines.append(f"- **Std (treatment):** {float(st):.6f}")
-                printed_std = True
-            if not printed_std and ('std_pooled' in result and result['std_pooled'] is not None):
-                lines.append(f"- **Std (pooled):** {float(result['std_pooled']):.6f}")
+            # Dispersion
+            # - For binary/proportion metrics: show Standard Error (SE) of the estimated proportion.
+            # - For continuous metrics: show sample standard deviation (Std) per group.
+            if result.get('metric_type') == 'binary':
+                try:
+                    p_c = float(result['control_value'])
+                    n_c = int(result['sample_size_control'])
+                    p_t = float(result['treatment_value'])
+                    n_t = int(result['sample_size_treatment'])
+                    if n_c > 0:
+                        se_c = float(np.sqrt(max(p_c * (1.0 - p_c), 0.0) / n_c))
+                        lines.append(f"- **SE (control):** {se_c:.6f}")
+                    if n_t > 0:
+                        se_t = float(np.sqrt(max(p_t * (1.0 - p_t), 0.0) / n_t))
+                        lines.append(f"- **SE (treatment):** {se_t:.6f}")
+                except Exception:
+                    pass
+            else:
+                sc = result.get('std_control')
+                st = result.get('std_treatment')
+                printed_std = False
+                if sc is not None:
+                    lines.append(f"- **Std (control):** {float(sc):.6f}")
+                    printed_std = True
+                if st is not None:
+                    lines.append(f"- **Std (treatment):** {float(st):.6f}")
+                    printed_std = True
+                if not printed_std and ('std_pooled' in result and result['std_pooled'] is not None):
+                    lines.append(f"- **Std (pooled):** {float(result['std_pooled']):.6f}")
             lines.append(f"- **Lift:** {result['lift']:.2%}")
             lines.append(f"- **P-value:** {result['p_value']:.6f}")
             lines.append(f"- **95% CI:** [{result['ci_lower']:.4f}, {result['ci_upper']:.4f}]")

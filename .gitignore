@@ -22,3 +22,6 @@ ENV/
 # Cache
 .cache/
 
+# CSharp build results
+bin/
+obj/

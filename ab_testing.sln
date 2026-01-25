@@ -1,0 +1,32 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ab_framework_cs", "ab_framework_cs", "{28E503D5-1559-2F6D-2642-6A3E9D29A4A8}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{E721D214-7451-6B4C-FE64-F09ED8C58E31}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AbFramework", "ab_framework_cs\src\AbFramework\AbFramework.csproj", "{CBB9EB5B-7067-6ECE-1AA2-F5B8A4F1352E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CBB9EB5B-7067-6ECE-1AA2-F5B8A4F1352E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CBB9EB5B-7067-6ECE-1AA2-F5B8A4F1352E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CBB9EB5B-7067-6ECE-1AA2-F5B8A4F1352E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CBB9EB5B-7067-6ECE-1AA2-F5B8A4F1352E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{E721D214-7451-6B4C-FE64-F09ED8C58E31} = {28E503D5-1559-2F6D-2642-6A3E9D29A4A8}
+		{CBB9EB5B-7067-6ECE-1AA2-F5B8A4F1352E} = {E721D214-7451-6B4C-FE64-F09ED8C58E31}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {A7F8E708-BE78-423E-B5E7-8C52F2584A8D}
+	EndGlobalSection
+EndGlobal

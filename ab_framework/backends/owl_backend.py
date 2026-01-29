@@ -126,13 +126,14 @@ class OwlBackend(StatisticalBackend):
         mde: float,
         alpha: float = 0.05,
         power: float = 0.80,
-        ratio: float = 1.0,
+        treatment_fraction: float = 0.5,
     ) -> Dict[str, Any]:
         """Sample size planning for proportion metrics using normal approximation.
 
-            This uses the same closed-form normal-approximation formula described
-            in the theory documentation for proportion metrics so that existing
-            theoretical documentation remains accurate.
+            This mirrors the abstract backend API and uses
+            ``treatment_fraction`` as the fraction of traffic allocated to the
+            treatment variant. Internally this is converted to a
+            treatment:control ratio for the closed-form formula.
         """
         treatment_rate = baseline_rate * (1 + mde)
         pooled_rate = (baseline_rate + treatment_rate) / 2
@@ -140,6 +141,12 @@ class OwlBackend(StatisticalBackend):
 
         z_alpha = stats.norm.ppf(1 - alpha / 2)
         z_beta = stats.norm.ppf(power)
+
+        # Convert treatment_fraction to treatment:control ratio for formulas.
+        if 0.0 < treatment_fraction < 1.0:
+            ratio = treatment_fraction / (1.0 - treatment_fraction)
+        else:
+            ratio = 1.0
 
         n_control = (
             (z_alpha + z_beta) ** 2 * pooled_variance * (1 + 1 / ratio)
@@ -160,6 +167,7 @@ class OwlBackend(StatisticalBackend):
                 'mde_absolute': treatment_rate - baseline_rate,
                 'alpha': alpha,
                 'power': power,
+                'treatment_fraction': treatment_fraction,
                 'ratio': ratio,
                 'pooled_rate': pooled_rate,
             },

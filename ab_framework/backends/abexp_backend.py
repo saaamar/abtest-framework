@@ -153,7 +153,7 @@ class AbexpBackend(StatisticalBackend):
         mde: float,
         alpha: float = 0.05,
         power: float = 0.80,
-        ratio: float = 1.0,
+        treatment_fraction: float = 0.5,
     ) -> Dict[str, Any]:
         """Sample size planning for proportion metrics using abexp.
         
@@ -162,7 +162,8 @@ class AbexpBackend(StatisticalBackend):
             mde: Minimum detectable effect as relative change (e.g., 0.10 for 10% lift)
             alpha: Significance level (default 0.05)
             power: Statistical power (default 0.80)
-            ratio: Ratio of treatment to control size (default 1.0)
+            treatment_fraction: Fraction of traffic allocated to treatment
+                (e.g. 0.5 for 50/50, 0.3 for 30% treatment / 70% control)
         
         Returns:
             Dictionary with sample size recommendations
@@ -180,8 +181,13 @@ class AbexpBackend(StatisticalBackend):
         )
         
         n_control = int(np.ceil(n_control))
-        # Note: abexp's ssd_prop doesn't support ratio parameter
-        # For unequal allocation, you'd need to adjust manually
+        # Note: abexp's ssd_prop doesn't support allocation ratio directly.
+        # Approximate unequal allocation by scaling treatment size via the
+        # implied treatment:control ratio from treatment_fraction.
+        if 0.0 < treatment_fraction < 1.0:
+            ratio = treatment_fraction / (1.0 - treatment_fraction)
+        else:
+            ratio = 1.0
         n_treatment = int(np.ceil(n_control * ratio))
         
         return {
@@ -195,6 +201,7 @@ class AbexpBackend(StatisticalBackend):
                 'mde_absolute': treatment_rate - baseline_rate,
                 'alpha': alpha,
                 'power': power,
+                'treatment_fraction': treatment_fraction,
                 'ratio': ratio,
             },
             'backend': 'abexp',

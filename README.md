@@ -200,7 +200,6 @@ from ab_framework import ABTest
 
 planning_test = ABTest(
     name="planning_only",
-    data=pd.DataFrame({"user_id": [1, 2], "variant": ["A", "B"]}),
 )
 
 result = planning_test.backend.sample_size_proportion(
@@ -234,7 +233,6 @@ from ab_framework import ABTest
 
 planning_test = ABTest(
     name="planning_only",
-    data=pd.DataFrame({"user_id": [1, 2], "variant": ["A", "B"]}),
 )
 
 # Get required sample size for a proportion metric

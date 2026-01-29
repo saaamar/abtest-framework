@@ -170,7 +170,7 @@ class ScipyBackend(StatisticalBackend):
         z_alpha = stats.norm.ppf(1 - alpha / 2)  # Two-tailed
         z_beta = stats.norm.ppf(power)
         
-        # Convert treatment fraction to internal treatment:control ratio
+        # Convert treatment_fraction to internal treatment:control ratio
         # (used by the closed-form formulas).
         if 0.0 < treatment_fraction < 1.0:
             ratio = treatment_fraction / (1.0 - treatment_fraction)

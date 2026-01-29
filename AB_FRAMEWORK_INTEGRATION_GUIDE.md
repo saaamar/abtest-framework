@@ -339,6 +339,15 @@ sample_size = backend.sample_size_proportion(
 3. **Variants**: The ABTest is configured with explicit variant labels (e.g., `["A", "B"]`).
 4. **Unit-level aggregation**: Metrics should aggregate to the experiment's randomization unit (user, conversation, impression, etc.) and return per-variant summary stats.
 
+### How to Think About "Lift" and MDE
+
+When you plan for a "2%" or "10%" lift (the MDE) and when the framework reports an observed lift for a metric, both are defined on the **cumulative experiment window**:
+
+- All rows from **day 1 of the experiment up to the analysis timestamp** are pooled when your metric function computes per‑variant summary stats.
+- The backend then tests the difference between those **cumulative** control/treatment summaries.
+
+Per‑day metric curves (daily rates, daily p‑values) are recommended for **monitoring and diagnostics** only (catching SRM, obvious breaks, seasonality, etc.). They are typically under‑powered and should not be used as separate decision criteria. The decision about whether you achieved the planned MDE is always based on the **pooled, cumulative effect**.
+
 ### Common Data Patterns:
 
 #### Event-Level Data (Recommended):

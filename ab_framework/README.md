@@ -266,6 +266,8 @@ Options:
 
 When running experiments, you typically track several metrics with different purposes. Understanding these roles helps make clear, confident decisions.
 
+**Important convention – MDE and lift are cumulative:** throughout this documentation, the "Minimum Detectable Effect" (MDE) and the reported "lift" for a metric refer to the **overall effect on the full experiment window** (all data from day 1 up to the analysis time), not to per‑day effects. You are free to plot per‑day rates and p‑values for monitoring and diagnostics, but the formal hypothesis tests and planning math are always about the **cumulative difference between variants over the chosen window**.
+
 ### Metric Roles
 
 #### Primary Metric (What You Want to Improve)
@@ -885,11 +887,9 @@ baseline_mean = aa_results.metric_results['key_metric']['control_value']
 baseline_std = aa_results.metric_results['key_metric']['std_pooled']
 
 from ab_framework import ABTest
-import pandas as pd
 
 planning_test = ABTest(
     name="planning_only",
-    data=pd.DataFrame({"user_id": [1, 2], "variant": ["A", "B"]}),
 )
 
 sample_plan = planning_test.backend.sample_size_mean(
@@ -917,7 +917,6 @@ from ab_framework import ABTest
 
 planning_test = ABTest(
     name="planning_only",
-    data=pd.DataFrame({"user_id": [1, 2], "variant": ["A", "B"]}),
 )
 
 # For conversion rates
